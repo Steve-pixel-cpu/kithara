@@ -19,6 +19,8 @@ class TunerScreen extends StatefulWidget {
     this.micPermission,
     this.haptics,
     this.theme = KitharaTheme.dark,
+    this.onThemeToggle,
+    this.onSelectString,
   });
 
   final TunerController controller;
@@ -31,6 +33,12 @@ class TunerScreen extends StatefulWidget {
 
   /// 设计令牌（aulos 设计语言，深浅两套）。
   final KitharaTheme theme;
+
+  /// 主题切换回调（主题所有权在装配层/外部）。
+  final VoidCallback? onThemeToggle;
+
+  /// 点击弦条手动指定目标弦（参数为该弦音名对应的半音索引）。
+  final ValueChanged<int>? onSelectString;
 
   @override
   State<TunerScreen> createState() => _TunerScreenState();
@@ -216,23 +224,45 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                     ],
                   ),
                   ),
-                  Flexible(
-                    child: InkWell(
-                    onTap: () => _showA4Dialog(context, s.a4),
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      child: Text(
-                        'A4 ${s.a4.toStringAsFixed(1)}',
-                        style: TextStyle(
-                          color: t.text3,
-                          fontSize: 16,
-                          fontFeatures: const [FontFeature.tabularFigures()],
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      InkWell(
+                        key: const Key('theme_toggle'),
+                        onTap: widget.onThemeToggle,
+                        borderRadius: BorderRadius.circular(20),
+                        child: Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Icon(
+                            t.brightness == Brightness.dark
+                                ? Icons.light_mode_outlined
+                                : Icons.dark_mode_outlined,
+                            color: t.text3,
+                            size: 20,
+                          ),
                         ),
                       ),
-                    ),
-                  ),
+                      Flexible(
+                        child: InkWell(
+                          onTap: () => _showA4Dialog(context, s.a4),
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            child: Text(
+                              'A4 ${s.a4.toStringAsFixed(1)}',
+                              style: TextStyle(
+                                color: t.text3,
+                                fontSize: 16,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures()
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -254,6 +284,9 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                       GlowRing(
                         needle: display,
                         locked: s.inTune,
+                        near: s.hasSignal &&
+                            !s.inTune &&
+                            s.cents.abs() <= 30,
                         hasSignal: s.hasSignal,
                         theme: t,
                         size: 300,
@@ -270,7 +303,7 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                                   ? t.ok
                                   : (s.hasSignal ? t.text : t.text3),
                               fontWeight: FontWeight.w700,
-                              fontSize: 84,
+                              fontSize: 64,
                               height: 1.0,
                               letterSpacing: -2,
                             ),
@@ -281,7 +314,11 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                                 ? '${s.cents >= 0 ? '+' : ''}${s.cents.toStringAsFixed(0)}¢'
                                 : '',
                             style: TextStyle(
-                              color: s.inTune ? t.ok : t.text2,
+                              color: s.inTune
+                                  ? t.ok
+                                  : (s.hasSignal && s.cents.abs() <= 30
+                                      ? t.warn
+                                      : t.text2),
                               fontSize: 20,
                               fontFeatures: const [
                                 FontFeature.tabularFigures()
@@ -300,7 +337,11 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
             Text(
               _guidance(s),
               style: TextStyle(
-                color: s.inTune ? t.ok : t.text3,
+                color: s.inTune
+                    ? t.ok
+                    : (s.hasSignal && s.cents.abs() <= 30
+                        ? t.warn
+                        : t.text3),
                 fontSize: 15,
                 letterSpacing: 0.3,
               ),
@@ -316,15 +357,22 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                   children: [
                     for (final st in s.mode.strings)
                       Expanded(
-                        child: _StringBar(
-                          key: Key('led_${st.name}'),
-                          target: st,
-                          t: t,
-                          active: s.activeString?.semitoneIndex ==
-                              st.semitoneIndex,
-                          inTune: s.activeString?.semitoneIndex ==
-                                  st.semitoneIndex &&
-                              s.inTune,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () {
+                            widget.controller.selectString(st.semitoneIndex);
+                            widget.onSelectString?.call(st.semitoneIndex);
+                          },
+                          child: _StringBar(
+                            key: Key('led_${st.name}'),
+                            target: st,
+                            t: t,
+                            active: s.activeString?.semitoneIndex ==
+                                st.semitoneIndex,
+                            inTune: s.activeString?.semitoneIndex ==
+                                    st.semitoneIndex &&
+                                s.inTune,
+                          ),
                         ),
                       ),
                   ],

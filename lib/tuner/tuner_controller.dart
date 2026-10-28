@@ -117,6 +117,18 @@ class TunerController extends ChangeNotifier {
     }
   }
 
+  /// 手动指定目标弦（点 LED）；再次点击同一弦取消选择。
+  void selectString(int semitoneIndex) {
+    if (_active?.semitoneIndex == semitoneIndex) {
+      _active = null;
+    } else {
+      _active = StringTarget(semitoneIndex, _a4);
+      _pending = null;
+      _pendingCount = 0;
+    }
+    notifyListeners();
+  }
+
   void setMode(TuningMode mode) {
     _mode = mode.withA4(_a4);
     _active = null;

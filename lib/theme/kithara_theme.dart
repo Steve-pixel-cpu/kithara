@@ -66,7 +66,7 @@ class KitharaTheme {
     warn: Color(0xFFFBBF24),
     warnSoft: Color(0x1FFBBF24), // .12
     err: Color(0xFFF87171),
-    popBg: Color(0xBD24242A), // rgba(36,36,42,.74)
+    popBg: Color(0xFF1E1E23), // 实色，不透明
   );
 
   /// 浅色：aulos [data-theme=light] 覆盖令牌
@@ -89,7 +89,7 @@ class KitharaTheme {
     warn: Color(0xFF946200),
     warnSoft: Color(0xFFFBF2DC),
     err: Color(0xFFCF3A2C),
-    popBg: Color(0xC7FFFFFF), // rgba(255,255,255,.78)
+    popBg: Color(0xFFFFFFFF), // 实色，不透明
   );
 
   /// 供 MaterialApp 用：Scaffold 底色、字体栈、Material 组件基色。
