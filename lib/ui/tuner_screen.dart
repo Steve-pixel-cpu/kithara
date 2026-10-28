@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../audio/mic_stream.dart';
+import '../theme/kithara_theme.dart';
 import '../tuner/tuner_controller.dart';
 import '../tuner/tuning_modes.dart';
 import 'platform_services.dart';
@@ -16,6 +17,7 @@ class TunerScreen extends StatefulWidget {
     required this.mic,
     this.micPermission,
     this.haptics,
+    this.theme = KitharaTheme.dark,
   });
 
   final TunerController controller;
@@ -25,6 +27,9 @@ class TunerScreen extends StatefulWidget {
   final MicStream mic;
   final MicPermission? micPermission;
   final Haptics? haptics;
+
+  /// 设计令牌（aulos 设计语言，深浅两套）。
+  final KitharaTheme theme;
 
   @override
   State<TunerScreen> createState() => _TunerScreenState();
@@ -111,25 +116,28 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final s = widget.controller.state;
-    final theme = Theme.of(context);
+    final t = widget.theme;
     final isChromatic = s.mode.semitones.isEmpty;
 
     if (_permissionDenied) {
       return Scaffold(
-        backgroundColor: const Color(0xFF15171C),
+        backgroundColor: t.bg,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
-              Icon(Icons.mic_off, color: Colors.white24, size: 64),
-              SizedBox(height: 16),
+            children: [
+              Icon(Icons.mic_off, color: t.text3, size: 64),
+              const SizedBox(height: 16),
               Text('需要麦克风权限',
-                  style: TextStyle(color: Colors.white70, fontSize: 18)),
-              SizedBox(height: 24),
+                  style: TextStyle(color: t.text2, fontSize: 18)),
+              const SizedBox(height: 24),
             ],
           ),
         ),
         floatingActionButton: FloatingActionButton.extended(
+          backgroundColor: t.surface2,
+          foregroundColor: t.text,
+          elevation: 0,
           onPressed: () {
             setState(() => _permissionDenied = false);
             _startup();
@@ -141,51 +149,70 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFF15171C),
+      backgroundColor: t.bg,
       body: SafeArea(
         child: Column(
           children: [
-            // 顶部：模式选择 + 参考音
+            // 顶部：模式选择 + 参考音（surface-2 底 + 1px 边框, aulos 分层手法）
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  PopupMenuButton<TuningMode>(
+                  Flexible(
+                    child: PopupMenuButton<TuningMode>(
+                    color: t.popBg,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: t.border),
+                    ),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF23262E),
-                        borderRadius: BorderRadius.circular(20),
+                        color: t.surface2,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: t.border),
                       ),
                       child: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(s.mode.label,
-                              style: const TextStyle(color: Colors.white)),
-                          const Icon(Icons.arrow_drop_down,
-                              color: Colors.white70),
+                          Flexible(
+                            child: Text(s.mode.label,
+                                style: TextStyle(color: t.text),
+                                overflow: TextOverflow.ellipsis),
+                          ),
+                          Icon(Icons.arrow_drop_down, color: t.text2),
                         ],
                       ),
                     ),
                     onSelected: (m) => widget.controller.setMode(m),
                     itemBuilder: (_) => [
                       for (final m in TuningModes.all)
-                        PopupMenuItem(value: m, child: Text(m.label)),
+                        PopupMenuItem(
+                          value: m,
+                          child: Text(m.label,
+                              style: TextStyle(color: t.text)),
+                        ),
                     ],
                   ),
-                  InkWell(
+                  ),
+                  Flexible(
+                    child: InkWell(
                     onTap: () => _showA4Dialog(context, s.a4),
+                    borderRadius: BorderRadius.circular(12),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF23262E),
-                        borderRadius: BorderRadius.circular(20),
+                        color: t.surface2,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: t.border),
                       ),
                       child: Text('A4 ${s.a4.toStringAsFixed(1)} Hz',
-                          style: const TextStyle(color: Colors.white70)),
+                          style: TextStyle(color: t.text2)),
                     ),
+                  ),
                   ),
                 ],
               ),
@@ -197,18 +224,18 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
               children: [
                 Text(
                   s.noteLabel,
-                  style: theme.textTheme.displayLarge?.copyWith(
-                    color: s.hasSignal ? Colors.white : Colors.white30,
-                    fontWeight: FontWeight.bold,
+                  style: TextStyle(
+                    color: s.hasSignal ? t.text : t.text3,
+                    fontWeight: FontWeight.w700,
                     fontSize: 72,
+                    height: 1.0,
                   ),
                 ),
                 const SizedBox(width: 12),
                 if (s.inTune)
-                  const KeyedSubtree(
-                    key: Key('in_tune_indicator'),
-                    child: Icon(Icons.check_circle,
-                        color: Color(0xFF33D17A), size: 40),
+                  KeyedSubtree(
+                    key: const Key('in_tune_indicator'),
+                    child: Icon(Icons.check_circle, color: t.ok, size: 40),
                   ),
               ],
             ),
@@ -218,10 +245,12 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
                   ? '${s.cents >= 0 ? '+' : ''}${s.cents.toStringAsFixed(0)} ¢'
                   : '未检测到信号',
               style: TextStyle(
+                // 色彩只表达状态（aulos 原则）: inTune=ok, 检测中=warn, 无信号=text3
                 color: s.inTune
-                    ? const Color(0xFF33D17A)
-                    : (s.hasSignal ? Colors.orange : Colors.white24),
+                    ? t.ok
+                    : (s.hasSignal ? t.warn : t.text3),
                 fontSize: 22,
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
             const Spacer(),
@@ -231,7 +260,8 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
               child: SizedBox(
                 height: 140,
                 child: CustomPaint(
-                  painter: _NeedleGauge(needle: s.needle, hasSignal: s.hasSignal),
+                  painter: _NeedleGauge(
+                      needle: s.needle, hasSignal: s.hasSignal, t: t),
                   size: Size.infinite,
                 ),
               ),
@@ -243,17 +273,20 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     for (final st in s.mode.strings)
-                      _StringBar(
-                        key: Key('string_bar_${st.name}'),
-                        target: st,
-                        active: s.activeString?.semitoneIndex ==
-                            st.semitoneIndex,
-                        inTune: s.activeString?.semitoneIndex ==
-                                st.semitoneIndex &&
-                            s.inTune,
+                      Expanded(
+                        child: _StringBar(
+                          key: Key('string_bar_${st.name}'),
+                          target: st,
+                          t: t,
+                          active: s.activeString?.semitoneIndex ==
+                              st.semitoneIndex,
+                          inTune: s.activeString?.semitoneIndex ==
+                                  st.semitoneIndex &&
+                              s.inTune,
+                        ),
                       ),
                   ],
                 ),
@@ -265,39 +298,52 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
   }
 
   void _showA4Dialog(BuildContext context, double current) {
+    final t = widget.theme;
     var value = current;
     showDialog<void>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setState) => AlertDialog(
-          backgroundColor: const Color(0xFF23262E),
-          title: const Text('参考音 A4', style: TextStyle(color: Colors.white)),
+          backgroundColor: t.popBg,
+          title: Text('参考音 A4', style: TextStyle(color: t.text)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text('${value.toStringAsFixed(1)} Hz',
-                  style: const TextStyle(color: Colors.white, fontSize: 24)),
-              Slider(
-                value: value,
-                min: 430,
-                max: 450,
-                divisions: 20,
-                label: value.toStringAsFixed(1),
-                onChanged: (v) => setState(() => value = v),
+                  style: TextStyle(
+                    color: t.text,
+                    fontSize: 24,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  )),
+              SliderTheme(
+                data: SliderThemeData(
+                  activeTrackColor: t.accent,
+                  inactiveTrackColor: t.surface3,
+                  thumbColor: t.text,
+                  overlayColor: t.accentSoft,
+                ),
+                child: Slider(
+                  value: value,
+                  min: 430,
+                  max: 450,
+                  divisions: 20,
+                  label: value.toStringAsFixed(1),
+                  onChanged: (v) => setState(() => value = v),
+                ),
               ),
             ],
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('取消'),
+              child: Text('取消', style: TextStyle(color: t.text2)),
             ),
             TextButton(
               onPressed: () {
                 widget.controller.setA4(value);
                 Navigator.pop(ctx);
               },
-              child: const Text('确定'),
+              child: Text('确定', style: TextStyle(color: t.accent)),
             ),
           ],
         ),
@@ -310,42 +356,60 @@ class _StringBar extends StatelessWidget {
   const _StringBar({
     super.key,
     required this.target,
+    required this.t,
     required this.active,
     required this.inTune,
   });
 
   final StringTarget target;
+  final KitharaTheme t;
   final bool active;
   final bool inTune;
 
   @override
   Widget build(BuildContext context) {
-    final color = inTune
-        ? const Color(0xFF33D17A)
-        : (active ? Colors.orange : const Color(0xFF3A3E48));
+    // aulos 手法: 默认 surface-2 融入背景, active 用 accent 描边+微亮底,
+    // inTune 才给状态色 (ok-soft 底 + ok 描边)
     return Column(
       children: [
         Container(
           width: 40,
           height: 64,
           decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(8),
+            color: inTune
+                ? t.okSoft
+                : (active ? t.accentSoft : t.surface2),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: inTune
+                  ? t.ok
+                  : (active ? t.accent : t.border),
+              width: inTune || active ? 1.5 : 1,
+            ),
           ),
         ),
         const SizedBox(height: 4),
-        Text(target.name, style: const TextStyle(color: Colors.white70)),
+        Text(
+          target.name,
+          style: TextStyle(
+            color: inTune ? t.ok : (active ? t.text : t.text3),
+            fontSize: 12,
+            fontWeight: active || inTune ? FontWeight.w600 : FontWeight.w400,
+          ),
+        ),
       ],
     );
   }
 }
 
 /// 半圆仪表：刻度弧 + 指针。needle ∈ [-1,1]，0 居中，±50¢ 满偏。
+/// 颜色即状态: 指针常态 accent 灰, 接近居中(|n|<0.1)变 ok 绿, 无信号 text3。
 class _NeedleGauge extends CustomPainter {
-  _NeedleGauge({required this.needle, required this.hasSignal});
+  _NeedleGauge({required this.needle, required this.hasSignal, required this.t});
 
   final double needle;
   final bool hasSignal;
+  final KitharaTheme t;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -358,7 +422,7 @@ class _NeedleGauge extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 6
       ..strokeCap = StrokeCap.round
-      ..color = const Color(0xFF3A3E48);
+      ..color = t.surface3;
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
       math.pi + (math.pi - sweepMax) / 2,
@@ -366,11 +430,11 @@ class _NeedleGauge extends CustomPainter {
       false,
       trackPaint,
     );
-    // 中央刻度
+    // 中央刻度（对准区）
     final tickPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3
-      ..color = const Color(0xFF5A5F6B);
+      ..color = t.borderStrong;
     final midAngle = math.pi + (math.pi - sweepMax) / 2 + sweepMax / 2;
     canvas.drawLine(
       center,
@@ -390,10 +454,8 @@ class _NeedleGauge extends CustomPainter {
       ..strokeWidth = 4
       ..strokeCap = StrokeCap.round
       ..color = hasSignal
-          ? (n.abs() < 0.1
-              ? const Color(0xFF33D17A)
-              : Colors.orange)
-          : Colors.white24;
+          ? (n.abs() < 0.1 ? t.ok : t.accent)
+          : t.text3;
     canvas.drawLine(
       center,
       center + Offset(math.cos(angle), math.sin(angle)) * (radius - 6),

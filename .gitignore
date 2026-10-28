@@ -2,3 +2,4 @@
 .superpowers/
 android/.kotlin/
 build/
+test/ui/goldens/

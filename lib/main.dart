@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import 'audio/mic_stream.dart';
+import 'theme/kithara_theme.dart';
 import 'dsp/pitch_detector.dart';
 import 'tuner/tuner_controller.dart';
 import 'tuner/tuner_settings.dart';
@@ -18,14 +19,7 @@ class KitharaApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Kithara',
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF33D17A),
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-      ),
+      theme: KitharaTheme.dark.toThemeData(),
       home: const _TunerHome(),
     );
   }
@@ -79,6 +73,7 @@ class _TunerHomeState extends State<_TunerHome> {
       mic: _mic,
       micPermission: MicPermissionImpl(_mic),
       haptics: HapticsImpl(),
+      theme: KitharaTheme.dark,
     );
   }
 }
