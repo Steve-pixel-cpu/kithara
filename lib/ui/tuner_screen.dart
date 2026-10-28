@@ -603,20 +603,21 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 14),
                       decoration: BoxDecoration(
+                        // 选中态同弦号胶囊/LED 淡绿系（okSoft 底 + ok 描边）
                         color: widget.noiseGate == val
-                            ? t.accentSoft
+                            ? t.okSoft
                             : Colors.transparent,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: widget.noiseGate == val
-                              ? t.accent
+                              ? t.ok
                               : Colors.transparent,
                         ),
                       ),
                       child: Text(label,
                           style: TextStyle(
                             color: widget.noiseGate == val
-                                ? t.text
+                                ? t.ok
                                 : t.text2,
                             fontWeight: widget.noiseGate == val
                                 ? FontWeight.w600
