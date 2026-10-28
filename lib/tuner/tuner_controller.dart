@@ -58,6 +58,11 @@ class TunerController extends ChangeNotifier {
   /// 可注入时钟（测试用）
   DateTime Function() _now = DateTime.now;
 
+  /// 信号滞回：触发检出需 0.85（防噪声误报），维持检出只需 0.75
+  /// （防门限边缘抖动导致音名闪烁）。上帧有信号时用低门限判断。
+  static const _confOn = 0.85;
+  static const _confHold = 0.75;
+
   @visibleForTesting
   set nowForTest(DateTime Function() f) => _now = f;
 
@@ -90,7 +95,17 @@ class TunerController extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    _hasSignal = true;
+    final hadSignal = _hasSignal;
+    _hasSignal = confidence >= (hadSignal ? _confHold : _confOn);
+    if (!_hasSignal) {
+      // 未达门限：走无信号路径（保持窗口仍生效）
+      final wasTuned = _active != null && _cents.abs() <= 5.0;
+      if (wasTuned) {
+        _lockHoldUntil = _now().add(_lockHoldDuration);
+      }
+      notifyListeners();
+      return;
+    }
     // 新信号到来 → 结束保持窗口，回到实时判定
     _lockHoldUntil = null;
     final mapperCents = _mapper.centsOffset(freq);

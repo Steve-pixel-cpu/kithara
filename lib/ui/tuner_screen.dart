@@ -1,6 +1,5 @@
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/physics.dart';
 
 import '../audio/mic_stream.dart';
@@ -368,26 +367,39 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                               ],
                             )),
                       ),
-                      if (s.hasSignal)
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // 环心: 纯音名（弦号在下方弦条，数字不进环心）
-                            Text(
-                              s.hasSignal ? s.noteLabel : '',
-                              key: const Key('in_tune_indicator'),
-                              style: TextStyle(
-                                color: s.inTune
-                                    ? t.ok
-                                    : (s.cents.abs() <= 30 ? t.warn : t.text),
-                                fontWeight: FontWeight.w700,
-                                fontSize: 72,
-                                height: 1.0,
-                                letterSpacing: -2,
-                              ),
-                            ),
-                          ],
+                      // 环心音名：AnimatedSwitcher 淡入淡出治闪烁
+                      // （置信度门限边缘抖动时，音名渐隐渐现而非瞬灭瞬现）
+                      KeyedSubtree(
+                        key: const Key('in_tune_indicator'),
+                        child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 180),
+                        transitionBuilder: (child, anim) => FadeTransition(
+                          opacity: anim,
+                          child: child,
                         ),
+                        child: s.hasSignal
+                            ? Text(
+                                s.noteLabel,
+                                key: ValueKey(s.noteLabel),
+                                style: TextStyle(
+                                  color: s.inTune
+                                      ? t.ok
+                                      : (s.cents.abs() <= 30
+                                          ? t.warn
+                                          : t.text),
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 72,
+                                  height: 1.0,
+                                  letterSpacing: -2,
+                                ),
+                              )
+                            : SizedBox(
+                                key: const ValueKey('empty'),
+                                width: 1,
+                                height: 72,
+                              ),
+                      ),
+                      ),
                     ],
                   );
                 },
@@ -397,8 +409,9 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
             // 品牌字标（环底部缺口处）
             Text(
               'K I T H A R A',
-              style: GoogleFonts.montserrat(
-                color: t.text3,
+              style: const TextStyle(
+                fontFamily: 'Montserrat',
+                color: Color(0xFF85868F),
                 fontSize: 11,
                 letterSpacing: 6,
                 fontWeight: FontWeight.w700,

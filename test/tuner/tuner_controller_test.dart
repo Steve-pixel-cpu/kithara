@@ -78,6 +78,23 @@ void main() {
     expect(controller.state.inTune, isFalse, reason: '过期释放');
   });
 
+  test('信号滞回: 置信度 0.75~0.85 之间不闪烁（维持上一帧状态）', () {
+    final controller = TunerController();
+    controller.onPitch(110.0, 0.95); // 稳定检出 → hasSignal
+    expect(controller.state.hasSignal, isTrue);
+    // 边缘置信度: 高于维持门限 0.75 → 维持检出
+    controller.onPitch(110.0, 0.80);
+    expect(controller.state.hasSignal, isTrue, reason: '滞回维持');
+    // 低于维持门限 → 丢信号
+    controller.onPitch(110.0, 0.70);
+    expect(controller.state.hasSignal, isFalse);
+    // 重新检出需高门限: 0.80 < 0.85 → 仍是丢
+    controller.onPitch(110.0, 0.80);
+    expect(controller.state.hasSignal, isFalse, reason: '触发需 0.85');
+    controller.onPitch(110.0, 0.86);
+    expect(controller.state.hasSignal, isTrue, reason: '高门限触发');
+  });
+
   test('setMode: 清锁弦计数, activeString 重置', () {
     controller.onPitch(110.0, 0.95);
     controller.onPitch(110.0, 0.95);
