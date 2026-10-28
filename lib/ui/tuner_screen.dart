@@ -2,7 +2,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/physics.dart';
 
 import '../audio/mic_stream.dart';
 import '../theme/kithara_theme.dart';
@@ -63,21 +62,11 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
   String? _stringHint; // 选弦提示（6弦），2s 自动消失
   Timer? _stringHintTimer;
 
-  // 弹簧动画：把 15Hz 的检测跳变插值成 60fps 连续运动
-  late final AnimationController _springCtrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 450),
-  );
   // 静止态呼吸：底环透明度 3s 周期缓变
   late final AnimationController _breathCtrl = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 3000),
   );
-  SpringSimulation _needleSim = SpringSimulation(
-    const SpringDescription(mass: 1, stiffness: 120, damping: 14),
-    0, 0, 0,
-  );
-  double _displayNeedle = 0.0;
 
   MicPermission get _perm =>
       widget.micPermission ?? MicPermissionImpl(widget.mic);
@@ -138,7 +127,6 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
   @override
   void dispose() {
     _stringHintTimer?.cancel();
-    _springCtrl.dispose();
     _breathCtrl.dispose();
     WidgetsBinding.instance.removeObserver(this);
     widget.controller.removeListener(_onState);
@@ -153,21 +141,6 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
       widget.haptics?.inTunePulse();
     }
     _wasInTune = s.inTune;
-    // 新目标 = 靠近对准区时把视觉目标吸到 0，减少抖动；否则用真实 needle
-    final target = s.inTune ? 0.0 : s.needle;
-    // 大偏差（松弦粘性锁场景）: 高刚度快跟——满偏状态不该慢慢晃过去
-    final bigMove = (target - _displayNeedle).abs() > 0.6;
-    _needleSim = SpringSimulation(
-      SpringDescription(
-        mass: 1,
-        stiffness: bigMove ? 400 : 120, // 大跳 3.3× 刚度
-        damping: bigMove ? 30 : 14,
-      ),
-      _displayNeedle, target, 0,
-    );
-    _springCtrl
-      ..stop()
-      ..animateWith(_needleSim);
     setState(() {});
   }
 
@@ -333,13 +306,12 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
             const Spacer(flex: 2),
             // 发光环仪表：环心音名大字 + cents；弹簧插值 needle
             Center(
-              child: AnimatedBuilder(
-                animation: _springCtrl,
-                builder: (context, _) {
-                  _displayNeedle = _needleSim.x(
-                      _springCtrl.value * 450 / 1000);
-                  // 锁定时指针钉死正中：±5¢ 内的真实抖动不传给视觉
-                  final display = s.inTune ? 0.0 : _displayNeedle;
+              child: Builder(
+                builder: (context) {
+                  // 指针 = state.needle（滤波+八度归一+滞回后的稳定值）
+                  // 与引导语同源——指哪说哪; 曾用弹簧追帧, 松弦交替帧下
+                  // 弹簧被频繁重置永远停在起点附近(指针乱摆的根因)
+                  final display = s.inTune ? 0.0 : s.needle;
                   return Stack(
                     alignment: Alignment.center,
                     children: [

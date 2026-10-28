@@ -141,6 +141,32 @@ void main() {
           reason: '音偏低必须提示拧紧');
     });
 
+    testWidgets('指针与引导语同源: 松弦交替帧下指针稳定在滤波偏差处（不追原始帧）', (tester) async {
+      final controller = TunerController();
+      await tester.pumpWidget(harness(controller, KitharaTheme.dark));
+      await tester.pump();
+      await tester.pump();
+      controller.selectString(-29); // 锁 E2
+      // 松弦交替序列: 70/140 交替（八度归一后都 -280¢ → needle -1）
+      for (final f in [70.0, 140.0, 70.0, 140.0, 70.0, 140.0, 70.0]) {
+        controller.onPitch(f, 0.95);
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      await tester.pump(const Duration(milliseconds: 400));
+      // 弹簧收敛后: 指针稳定满偏 -1, 不因交替帧来回摆
+      final ring = tester.widget<GlowRing>(find.byType(GlowRing));
+      expect(ring.needle, closeTo(-1.0, 0.1),
+          reason: 'needle=${ring.needle} 应稳定 -1（与引导语同源的滤波偏差）');
+      // 再连发 5 帧交替, 指针保持
+      for (final f in [140.0, 70.0, 140.0, 70.0, 140.0]) {
+        controller.onPitch(f, 0.95);
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      await tester.pump(const Duration(milliseconds: 400));
+      final ring2 = tester.widget<GlowRing>(find.byType(GlowRing));
+      expect(ring2.needle, closeTo(-1.0, 0.15), reason: '持续稳定不摆动');
+    });
+
     testWidgets('选弦提示为内联胶囊（引导语行内）, 不遮挡环心', (tester) async {
       final controller = TunerController();
       await tester.pumpWidget(harness(controller, KitharaTheme.dark));
