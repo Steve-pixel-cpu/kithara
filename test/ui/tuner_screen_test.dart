@@ -35,10 +35,13 @@ void main() {
     await tester.pump();
     // 打开模式菜单（点当前模式按钮）
     await tester.tap(find.text('标准'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Drop D').last);
-    await tester.pumpAndSettle();
-    expect(find.text('Drop D'), findsOneWidget);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.text('Drop D').first); // 菜单项（顶栏是'标准'）
+    // 等菜单退出动画结束（期间旧菜单项仍在树中）
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Drop D'), findsOneWidget); // 仅剩顶栏当前模式
     expect(find.byKey(const Key('led_D2')), findsOneWidget);
   });
 
@@ -54,10 +57,12 @@ void main() {
     await tester.pumpWidget(makeHarness());
     await tester.pump();
     await tester.tap(find.text('A4 440.0'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('参考音 A4'), findsOneWidget);
     expect(find.byType(Slider), findsOneWidget);
     await tester.tap(find.text('确定'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
   });
 }

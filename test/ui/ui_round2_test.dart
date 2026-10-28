@@ -8,6 +8,7 @@ import 'package:kithara/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:kithara/theme/kithara_theme.dart';
 import 'package:kithara/tuner/tuner_controller.dart';
+import 'package:kithara/ui/glow_ring.dart';
 import 'package:kithara/ui/platform_services.dart';
 import 'package:kithara/ui/tuner_screen.dart';
 
@@ -60,14 +61,16 @@ void main() {
       await tester.pump();
       await tester.pump();
       await tester.tap(find.text('A4 440.0'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
       final dialog = tester.widget<AlertDialog>(find.byType(AlertDialog));
       expect(dialog.backgroundColor, const Color(0xFF1E1E23)); // 实色
       expect((dialog.backgroundColor!.a * 255).round(), 255);
 
       // 关掉第一个弹窗
       await tester.tap(find.text('确定'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
       // 浅色
       await tester.pumpWidget(harness(controller, KitharaTheme.light));
@@ -75,7 +78,8 @@ void main() {
       await tester.pump();
       await tester.pump();
       await tester.tap(find.text('A4 440.0'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
       final dialog2 = tester.widget<AlertDialog>(find.byType(AlertDialog));
       expect(dialog2.backgroundColor, Colors.white);
     });
@@ -119,7 +123,8 @@ void main() {
         const Color(0xFF0A0A0D),
       );
       await tester.tap(find.byKey(const Key('theme_toggle')));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
       // 切换回调触发了（screen 无内部状态，由回调通知外部换主题）
       expect(find.byKey(const Key('theme_toggle')), findsOneWidget);
     });
@@ -173,6 +178,24 @@ void main() {
         ).first,
       );
       expect(ink.onTap, isNotNull);
+    });
+
+    testWidgets('装饰: 环有刻度与量程标注, 底部有品牌字标, 静止态呼吸动画', (tester) async {
+      final controller = TunerController();
+      await tester.pumpWidget(harness(controller, KitharaTheme.dark));
+      await tester.pump();
+      // GlowRing 存在且带刻度开关
+      final ring = tester.widget<GlowRing>(find.byType(GlowRing));
+      expect(ring.showTicks, isTrue);
+      // 两端量程标注
+      expect(find.text('-50'), findsOneWidget);
+      expect(find.text('+50'), findsOneWidget);
+      expect(find.text('0'), findsOneWidget);
+      // 品牌字标
+      expect(find.text('K I T H A R A'), findsOneWidget);
+      // 呼吸动画推进一帧不异常
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('onThemeToggle 回调被调用', (tester) async {

@@ -34,7 +34,8 @@ void main() {
         haptics: FakeHaptics(),
       ),
     ));
-    await tester.pumpAndSettle();
+    await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('需要麦克风权限'), findsOneWidget);
     expect(find.text('重试'), findsOneWidget);
   });
@@ -49,7 +50,8 @@ void main() {
         haptics: FakeHaptics(),
       ),
     ));
-    await tester.pumpAndSettle();
+    await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('需要麦克风权限'), findsNothing);
     expect(find.text('标准'), findsOneWidget);
   });

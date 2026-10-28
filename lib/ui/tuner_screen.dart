@@ -44,7 +44,7 @@ class TunerScreen extends StatefulWidget {
   State<TunerScreen> createState() => _TunerScreenState();
 }
 
-class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, SingleTickerProviderStateMixin {
+class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, TickerProviderStateMixin {
   bool _micStarted = false;
   bool _permissionDenied = false;
   bool _wasInTune = false;
@@ -53,6 +53,11 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
   late final AnimationController _springCtrl = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 450),
+  );
+  // 静止态呼吸：底环透明度 3s 周期缓变
+  late final AnimationController _breathCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 3000),
   );
   SpringSimulation _needleSim = SpringSimulation(
     const SpringDescription(mass: 1, stiffness: 120, damping: 14),
@@ -68,6 +73,7 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     widget.controller.addListener(_onState);
+    _breathCtrl.repeat();
     _startup();
   }
 
@@ -118,6 +124,7 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
   @override
   void dispose() {
     _springCtrl.dispose();
+    _breathCtrl.dispose();
     WidgetsBinding.instance.removeObserver(this);
     widget.controller.removeListener(_onState);
     _stopMic();
@@ -292,6 +299,43 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                         hasSignal: s.hasSignal,
                         theme: t,
                         size: 300,
+                        breathPhase: _breathCtrl.value,
+                      ),
+                      // 量程标注（弧两端 + 顶部）
+                      Positioned(
+                        left: 18,
+                        bottom: 42,
+                        child: Text('-50',
+                            style: TextStyle(
+                              color: t.text3,
+                              fontSize: 11,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures()
+                              ],
+                            )),
+                      ),
+                      Positioned(
+                        right: 18,
+                        bottom: 42,
+                        child: Text('+50',
+                            style: TextStyle(
+                              color: t.text3,
+                              fontSize: 11,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures()
+                              ],
+                            )),
+                      ),
+                      Positioned(
+                        top: 12,
+                        child: Text('0',
+                            style: TextStyle(
+                              color: t.text3,
+                              fontSize: 11,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures()
+                              ],
+                            )),
                       ),
                       if (s.hasSignal)
                         Column(
@@ -334,6 +378,17 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
               ),
             ),
             const Spacer(),
+            // 品牌字标（环底部缺口处）
+            Text(
+              'K I T H A R A',
+              style: TextStyle(
+                color: t.text3,
+                fontSize: 11,
+                letterSpacing: 6,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 10),
             // 状态引导语（替代生硬的"未检测到信号"）
             Text(
               _guidance(s),
