@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:math' as math;
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kithara/audio/mic_stream.dart';
@@ -115,6 +117,28 @@ void main() {
       // 这里 pump 过保持窗口让 Timer 自然到期（框架禁 pending Timer）
       await tester.pump(const Duration(seconds: 3));
       await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('引导语方向: 音偏高→拧松, 音偏低→拧紧（不能反向误导）', (tester) async {
+      final controller = TunerController();
+      await tester.pumpWidget(harness(controller, KitharaTheme.dark));
+      await tester.pump();
+      await tester.pump();
+      // 锁定 D3 (第4弦, -19), 音偏高 +30¢ → 提示拧松
+      controller.selectString(-19);
+      for (var i = 0; i < 3; i++) {
+        controller.onPitch(146.83 * math.pow(2, 30 / 1200), 0.95);
+      }
+      await tester.pump();
+      expect(find.textContaining('拧松'), findsOneWidget,
+          reason: '音偏高必须提示拧松');
+      // 音偏低 -30¢ → 提示拧紧
+      for (var i = 0; i < 3; i++) {
+        controller.onPitch(146.83 * math.pow(2, -30 / 1200), 0.95);
+      }
+      await tester.pump();
+      expect(find.textContaining('拧紧'), findsOneWidget,
+          reason: '音偏低必须提示拧紧');
     });
 
     testWidgets('弦号提示浮层: 点击弦条显示 5弦, 2s 后消失', (tester) async {

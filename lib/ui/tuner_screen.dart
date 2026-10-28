@@ -155,8 +155,14 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
     _wasInTune = s.inTune;
     // 新目标 = 靠近对准区时把视觉目标吸到 0，减少抖动；否则用真实 needle
     final target = s.inTune ? 0.0 : s.needle;
+    // 大偏差（松弦粘性锁场景）: 高刚度快跟——满偏状态不该慢慢晃过去
+    final bigMove = (target - _displayNeedle).abs() > 0.6;
     _needleSim = SpringSimulation(
-      const SpringDescription(mass: 1, stiffness: 120, damping: 14),
+      SpringDescription(
+        mass: 1,
+        stiffness: bigMove ? 400 : 120, // 大跳 3.3× 刚度
+        damping: bigMove ? 30 : 14,
+      ),
       _displayNeedle, target, 0,
     );
     _springCtrl
@@ -514,17 +520,19 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
 
   /// 状态引导语：告诉用户下一步做什么，替代"未检测到信号"。
   String _guidance(TunerState s) {
-    // 大偏差（粘性锁下很松的弦）: 告诉用户还差多少, 指导拧紧
-    if (s.hasSignal && s.activeString != null && s.cents < -50) {
-      return '向 ${s.activeString!.name} 拧紧…（差 ${s.cents.abs().toStringAsFixed(0)}¢）';
+    // 大偏差（粘性锁下弦很松）: 按符号给方向——cents<0 音低拧紧, cents>0 音高拧松
+    if (s.hasSignal && s.activeString != null && s.cents.abs() > 50) {
+      final dir = s.cents < 0 ? '拧紧' : '拧松';
+      return '向 ${s.activeString!.name} $dir…（差 ${s.cents.abs().toStringAsFixed(0)}¢）';
     }
     if (s.mode.semitones.isEmpty) {
       // 半音阶：无目标弦
       if (!s.hasSignal) return '拨响任意弦开始调音';
       if (s.inTune) return '✓ ${s.noteLabel} 已调准';
+      // cents>0 = 检测音高于目标 = 偏高要拧松; cents<0 = 偏低要拧紧
       return s.cents > 15
-          ? '偏低，向 ${s.noteLabel} 拧紧'
-          : (s.cents < -15 ? '偏高，向 ${s.noteLabel} 拧松' : '微调…');
+          ? '偏高，向 ${s.noteLabel} 拧松'
+          : (s.cents < -15 ? '偏低，向 ${s.noteLabel} 拧紧' : '微调…');
     }
     final target = s.activeString;
     if (!s.hasSignal) {
@@ -533,8 +541,8 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
     if (s.inTune && target != null) return '✓ ${target.name} 已调准';
     if (target == null) return '音高偏离各弦，继续调整';
     return s.cents > 8
-        ? '向 ${target.name} 拧紧…'
-        : (s.cents < -8 ? '向 ${target.name} 拧松…' : '微调…');
+        ? '偏高，向 ${target.name} 拧松…'
+        : (s.cents < -8 ? '偏低，向 ${target.name} 拧紧…' : '微调…');
   }
 
   String _gateLabel(String gate) => switch (gate) {
