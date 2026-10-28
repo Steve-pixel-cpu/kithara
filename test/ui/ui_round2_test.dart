@@ -239,6 +239,61 @@ void main() {
       );
     });
 
+    testWidgets('设置按钮: 齿轮图标打开设置弹窗（降噪三档），A4 弹窗不含降噪', (tester) async {
+      final controller = TunerController();
+      var gateChanged = false;
+      await tester.pumpWidget(MaterialApp(
+        theme: KitharaTheme.dark.toThemeData(),
+        home: TunerScreen(
+          controller: controller,
+          mic: MicStream(),
+          micPermission: _Granted(),
+          haptics: _NoHaptics(),
+          theme: KitharaTheme.dark,
+          noiseGate: 'medium',
+          onNoiseGateChanged: (_) => gateChanged = true,
+        ),
+      ));
+      await tester.pump();
+      await tester.pump();
+      // 顶栏有设置齿轮按钮
+      expect(find.byKey(const Key('settings_btn')), findsOneWidget);
+      // A4 弹窗不含降噪
+      await tester.tap(find.text('A4 440.0'));
+      await tester.pump();
+      expect(find.text('降噪灵敏度'), findsNothing);
+      await tester.tap(find.text('取消'));
+      await tester.pump();
+      // 设置弹窗含降噪
+      await tester.tap(find.byKey(const Key('settings_btn')));
+      await tester.pump();
+      expect(find.text('降噪灵敏度'), findsOneWidget);
+      // 点'严格' → 回调触发
+      await tester.tap(find.text('严格'));
+      await tester.pump();
+      expect(gateChanged, isTrue);
+    });
+
+    testWidgets('刻度在弧内侧: 刻度半径 < 弧半径', (tester) async {
+      final controller = TunerController();
+      await tester.pumpWidget(harness(controller, KitharaTheme.dark));
+      await tester.pump();
+      final ring = tester.widget<GlowRing>(find.byType(GlowRing));
+      expect(ring.ticksInside, isTrue);
+    });
+
+    testWidgets('A4 弹窗: 确定按钮在取消左侧', (tester) async {
+      final controller = TunerController();
+      await tester.pumpWidget(harness(controller, KitharaTheme.dark));
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.text('A4 440.0'));
+      await tester.pump();
+      final confirmCenter = tester.getCenter(find.text('确定'));
+      final cancelCenter = tester.getCenter(find.text('取消'));
+      expect(confirmCenter.dx, lessThan(cancelCenter.dx));
+    });
+
     testWidgets('onThemeToggle 回调被调用', (tester) async {
       final controller = TunerController();
       var toggled = false;

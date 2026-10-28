@@ -17,6 +17,7 @@ class GlowRing extends StatelessWidget {
     required this.theme,
     this.size = 300,
     this.showTicks = true,
+    this.ticksInside = true,
     this.breathPhase = 0,
   });
 
@@ -29,6 +30,9 @@ class GlowRing extends StatelessWidget {
 
   /// 表盘刻度（仪器感装饰）
   final bool showTicks;
+
+  /// 刻度放弧内侧（默认，避开外圈视觉冲突）
+  final bool ticksInside;
 
   /// 静止态呼吸相位 0..1（一个呼吸周期内的进度），仅影响底环透明度
   final double breathPhase;
@@ -46,6 +50,7 @@ class GlowRing extends StatelessWidget {
           hasSignal: hasSignal,
           t: theme,
           showTicks: showTicks,
+          ticksInside: ticksInside,
           breathPhase: breathPhase,
         ),
       ),
@@ -61,6 +66,7 @@ class _GlowRingPainter extends CustomPainter {
     required this.hasSignal,
     required this.t,
     required this.showTicks,
+    required this.ticksInside,
     required this.breathPhase,
   });
 
@@ -70,6 +76,7 @@ class _GlowRingPainter extends CustomPainter {
   final bool hasSignal;
   final KitharaTheme t;
   final bool showTicks;
+  final bool ticksInside;
   final double breathPhase;
 
   // 270° 弧，缺口朝下
@@ -97,13 +104,14 @@ class _GlowRingPainter extends CustomPainter {
       ..color = t.surface3.withValues(alpha: breath);
     canvas.drawArc(rect, _startAngle, _sweep, false, track);
 
-    // 表盘刻度：11 根沿弧分布（每 27°），主刻度（0/±50）长且粗
+    // 表盘刻度：11 根沿弧分布（每 27°），主刻度（0/±50）长且粗；
+    // 刻度在弧内侧（从弧线向圆心方向伸出）
     if (showTicks) {
       for (var i = 0; i <= 10; i++) {
         final isMajor = i == 0 || i == 5 || i == 10;
         final ang = _startAngle + _sweep * i / 10;
-        final outer = radius + 4;
-        final inner = radius + (isMajor ? 14 : 9);
+        final outer = radius - 3; // 从弧内缘起笔
+        final inner = radius - (isMajor ? 14 : 9);
         final p1 = center +
             Offset(math.cos(ang), math.sin(ang)) * outer;
         final p2 = center +

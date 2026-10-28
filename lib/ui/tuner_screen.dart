@@ -258,6 +258,19 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       InkWell(
+                        key: const Key('settings_btn'),
+                        onTap: () {
+                          widget.haptics?.selectionClick();
+                          _showSettingsDialog(context);
+                        },
+                        borderRadius: BorderRadius.circular(20),
+                        child: Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Icon(Icons.settings_outlined,
+                              color: t.text3, size: 20),
+                        ),
+                      ),
+                      InkWell(
                         key: const Key('theme_toggle'),
                         onTap: () {
                           widget.haptics?.selectionClick();
@@ -490,6 +503,73 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
         : (s.cents < -8 ? '向 ${target.name} 拧松…' : '微调…');
   }
 
+  void _showSettingsDialog(BuildContext context) {
+    final t = widget.theme;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: t.popBg,
+        title: Text('设置', style: TextStyle(color: t.text)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('降噪灵敏度', style: TextStyle(color: t.text2, fontSize: 14)),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                for (final (label, val) in [
+                  ('宽松', 'low'),
+                  ('标准', 'medium'),
+                  ('严格', 'high'),
+                ])
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(
+                            color: widget.noiseGate == val
+                                ? t.accent
+                                : t.borderStrong,
+                          ),
+                          backgroundColor: widget.noiseGate == val
+                              ? t.accentSoft
+                              : Colors.transparent,
+                        ),
+                        onPressed: () {
+                          widget.haptics?.selectionClick();
+                          widget.onNoiseGateChanged?.call(val);
+                          Navigator.pop(ctx);
+                        },
+                        child: Text(
+                          label,
+                          style: TextStyle(
+                            color:
+                                widget.noiseGate == val ? t.text : t.text2,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              widget.haptics?.selectionClick();
+              Navigator.pop(ctx);
+            },
+            child: Text('关闭', style: TextStyle(color: t.text2)),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showA4Dialog(BuildContext context, double current) {
     final t = widget.theme;
     var value = current;
@@ -524,59 +604,10 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                   onChanged: (v) => setState(() => value = v),
                 ),
               ),
-              const SizedBox(height: 8),
-              // 降噪档位
-              Text('降噪灵敏度', style: TextStyle(color: t.text2, fontSize: 14)),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  for (final (label, val) in [
-                    ('宽松', 'low'),
-                    ('标准', 'medium'),
-                    ('严格', 'high'),
-                  ])
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(
-                              color: widget.noiseGate == val
-                                  ? t.accent
-                                  : t.borderStrong,
-                            ),
-                            backgroundColor: widget.noiseGate == val
-                                ? t.accentSoft
-                                : Colors.transparent,
-                          ),
-                          onPressed: () {
-                            widget.haptics?.selectionClick();
-                            widget.onNoiseGateChanged?.call(val);
-                          },
-                          child: Text(
-                            label,
-                            style: TextStyle(
-                              color: widget.noiseGate == val
-                                  ? t.text
-                                  : t.text2,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
             ],
           ),
           actions: [
-            TextButton(
-              onPressed: () {
-                widget.haptics?.selectionClick();
-                Navigator.pop(ctx);
-              },
-              child: Text('取消', style: TextStyle(color: t.text2)),
-            ),
+            // 主操作放左（用户要求），取消弱化居右
             TextButton(
               onPressed: () {
                 widget.haptics?.selectionClick();
@@ -584,6 +615,14 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                 Navigator.pop(ctx);
               },
               child: Text('确定', style: TextStyle(color: t.accent)),
+            ),
+            const SizedBox(width: 8),
+            TextButton(
+              onPressed: () {
+                widget.haptics?.selectionClick();
+                Navigator.pop(ctx);
+              },
+              child: Text('取消', style: TextStyle(color: t.text2)),
             ),
           ],
         ),
