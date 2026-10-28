@@ -145,7 +145,13 @@ class TunerController extends ChangeNotifier {
     if (_manualLock && _active != null) {
       // 粘性锁：跳过自动匹配，偏差 = 滤波后音高 相对 锁定弦
       final lockedSemi = _active!.semitoneIndex;
-      _cents = _semitonesFrom(smoothed, lockedSemi);
+      // 八度归一：松弦时基频极弱，检测器会在真实基频与 2× 泛音间交替；
+      // 把检测频率折到最接近目标弦的八度（×2/÷2），偏差方向恒定，指针不再遍历全量程
+      var f = smoothed;
+      final target = _a4 * math.pow(2.0, lockedSemi / 12.0);
+      while (f < target / 1.5) { f *= 2; } // 检测远低于目标 → 升八度（报的是低八度基频）
+      while (f > target * 1.5) { f /= 2; } // 检测远高于目标 → 降八度（报的是泛音）
+      _cents = _semitonesFrom(f, lockedSemi);
       _needle = (_cents / 50.0).clamp(-1.0, 1.0);
       // 显示音名 = 目标弦音名（初学者视角: 正在调这根弦，不随检测跳）
       _noteLabel = _mapper.noteName(lockedSemi);

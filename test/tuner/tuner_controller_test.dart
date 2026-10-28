@@ -68,6 +68,24 @@ void main() {
     expect(controller.state.noteLabel, 'E3');
   });
 
+  test('松弦八度归一: 锁 E2 后检测在基频/2倍泛音间交替, 偏差方向恒定不遍历', () {
+    final controller = TunerController();
+    controller.selectString(-29); // 锁 E2 = 82.41Hz
+    // 模拟真实松弦序列: 基频 70Hz 与 2x 泛音 140Hz 交替
+    final frames = [70.0, 140.0, 70.0, 140.0, 70.0, 140.0];
+    for (final f in frames) {
+      controller.onPitch(f, 0.95);
+    }
+    // 归一后: 70Hz→约-280¢(拧紧), 140Hz 降八度→70Hz→同样-280¢
+    // 所有帧 cents 都应为负且一致(±30¢ 内), 绝不出现 +50 方向
+    final cents = controller.state.cents;
+    expect(cents, lessThan(-100), reason: '恒负偏差: got $cents');
+    // 连续采样稳定性
+    controller.onPitch(140.0, 0.95);
+    final cents2 = controller.state.cents;
+    expect((cents2 - cents).abs(), lessThan(30), reason: '帧间稳定: $cents vs $cents2');
+  });
+
   test('松弦毛刺抑制: 检测帧间乱跳时中值滤波稳住读数（毛刺帧被丢弃）', () {
     final controller = TunerController();
     controller.selectString(-5); // 锁 E4
