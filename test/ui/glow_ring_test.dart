@@ -63,13 +63,14 @@ void main() {
       // 先有信号再丢失 → 音名不能残留
       controller.onPitch(110.0, 0.95);
       await tester.pump();
-      expect(find.text('A2(5)'), findsOneWidget); // 环心带弦号
-      expect(find.text('A2'), findsOneWidget); // 弦条标签
+      // 环心纯音名（弦号已移至弦条标签）；弦条 A2 是第 5 弦
+      expect(find.text('A2'), findsOneWidget); // 环心
+      expect(find.text('A2(5)'), findsOneWidget); // 弦条标签
       controller.onPitch(null, 0.9);
       await tester.pump();
-      // 环心无信号时整体不渲染（无 — 占位，无幽灵音名）；弦条 LED 标签常驻
+      // 环心无信号时整体不渲染（无 — 占位，无幽灵音名）；弦条标签带弦号常驻
       expect(find.text('—'), findsNothing);
-      expect(find.text('A2'), findsOneWidget);
+      expect(find.text('A2(5)'), findsOneWidget); // 弦条
       expect(find.textContaining('拨'), findsOneWidget); // 引导语
     });
 

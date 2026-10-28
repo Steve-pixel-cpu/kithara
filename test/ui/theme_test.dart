@@ -107,16 +107,16 @@ void main() {
       await tester.pumpWidget(harness(Brightness.dark, controller: controller));
       controller.onPitch(110.0 * 1.001, 0.95);
       await tester.pump();
-      // inTune cents 文字用 ok 色（取含 '¢' 的 Text，样式直取 widget.style）
-      final darkCents = tester.widgetList<Text>(find.textContaining('¢')).first;
-      expect(darkCents.style!.color, const Color(0xFF4ADE80));
+      // inTune 环心音名用 ok 色
+      final darkNote = tester.widget<Text>(find.text('A2').first);
+      expect(darkNote.style!.color, const Color(0xFF4ADE80));
 
       await tester.pumpWidget(harness(Brightness.light, controller: controller));
       await tester.pump();
       controller.onPitch(110.0 * 1.001, 0.95);
       await tester.pump();
-      final lightCents = tester.widgetList<Text>(find.textContaining('¢')).first;
-      expect(lightCents.style!.color, const Color(0xFF17803B));
+      final lightNote = tester.widget<Text>(find.text('A2').first);
+      expect(lightNote.style!.color, const Color(0xFF17803B));
     });
   });
 }

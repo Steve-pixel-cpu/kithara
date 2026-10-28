@@ -89,13 +89,11 @@ void main() {
       await tester.pumpWidget(harness(controller, KitharaTheme.dark));
       await tester.pump();
       await tester.pump();
-      // A2 -20¢: 接近但未到 ±5¢
+      // A2 -20¢: 接近但未到 ±5¢ → 环心音名黄色（接近态）
       controller.onPitch(110.0 * math.pow(2, -20 / 1200), 0.95);
       await tester.pump();
-      final centsText = tester
-          .widgetList<Text>(find.textContaining('¢'))
-          .first;
-      expect(centsText.style!.color, const Color(0xFFFBBF24)); // warn 黄
+      final noteText = tester.widget<Text>(find.text('A2').first);
+      expect(noteText.style!.color, const Color(0xFFFBBF24)); // warn 黄
     });
 
     testWidgets('点击弦条 LED 可手动指定目标弦（activeString 切换）', (tester) async {
@@ -295,6 +293,27 @@ void main() {
       final confirmCenter = tester.getCenter(find.text('确定'));
       final cancelCenter = tester.getCenter(find.text('取消'));
       expect(confirmCenter.dx, lessThan(cancelCenter.dx));
+    });
+
+    testWidgets('UI 精修: 环心无数字/弦号, 弦条标签带弦号, KITHARA 用品牌字体加粗', (tester) async {
+      final controller = TunerController();
+      await tester.pumpWidget(harness(controller, KitharaTheme.dark));
+      await tester.pump();
+      await tester.pump();
+      controller.onPitch(110.0 * 1.001, 0.95); // 锁定 A2
+      await tester.pump();
+      // 环心: 纯音名 A2（无弦号、无数字），字号 72 可辨
+      final ringNote = tester.widget<Text>(find.text('A2').first);
+      expect(ringNote.style!.fontSize, 72); // 环心音名（弦条是 12）
+      // 环心 cents 数字不渲染
+      expect(find.textContaining('¢'), findsNothing);
+      // 弦条标签带弦号: E2(6) / A2(5)
+      expect(find.text('E2(6)'), findsOneWidget);
+      expect(find.text('A2(5)'), findsOneWidget);
+      // 品牌字标加粗 + fontFamily 注入
+      final wordmark = tester.widget<Text>(find.text('K I T H A R A'));
+      expect(wordmark.style!.fontWeight, FontWeight.w700);
+      expect(wordmark.style!.fontFamily, isNotNull);
     });
 
     testWidgets('onThemeToggle 回调被调用', (tester) async {

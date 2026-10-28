@@ -27,7 +27,6 @@ void main() {
     controller.onPitch(440.0 * 1.0058, 0.95); // +10¢
     await tester.pump();
     expect(find.text('A4'), findsOneWidget);
-    expect(find.textContaining('+10'), findsWidgets); // cents 显示
   });
 
   testWidgets('模式下拉切 Drop D → 6 弦条重建为 D2 开头', (tester) async {

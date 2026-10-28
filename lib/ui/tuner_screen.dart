@@ -1,5 +1,6 @@
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/physics.dart';
 
 import '../audio/mic_stream.dart';
@@ -371,33 +372,18 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                         Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            // 环心音名（带弦序号 E2(6) 方便初学者）
+                            // 环心: 纯音名（弦号在下方弦条，数字不进环心）
                             Text(
-                              _noteWithIndex(s),
+                              s.hasSignal ? s.noteLabel : '',
                               key: const Key('in_tune_indicator'),
                               style: TextStyle(
                                 color: s.inTune
                                     ? t.ok
                                     : (s.cents.abs() <= 30 ? t.warn : t.text),
                                 fontWeight: FontWeight.w700,
-                                fontSize: 64,
+                                fontSize: 72,
                                 height: 1.0,
                                 letterSpacing: -2,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${s.cents >= 0 ? '+' : ''}${s.cents.toStringAsFixed(0)}¢',
-                              style: TextStyle(
-                                color: s.inTune
-                                    ? t.ok
-                                    : (s.cents.abs() <= 30
-                                        ? t.warn
-                                        : t.text2),
-                                fontSize: 20,
-                                fontFeatures: const [
-                                  FontFeature.tabularFigures()
-                                ],
                               ),
                             ),
                           ],
@@ -411,11 +397,11 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
             // 品牌字标（环底部缺口处）
             Text(
               'K I T H A R A',
-              style: TextStyle(
+              style: GoogleFonts.montserrat(
                 color: t.text3,
                 fontSize: 11,
                 letterSpacing: 6,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w700,
               ),
             ),
             const SizedBox(height: 10),
@@ -471,18 +457,14 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
     );
   }
 
-  /// 环心音名：弦模式下带弦序号（E2(6)），半音阶模式纯音名。
-  String _noteWithIndex(TunerState s) {
-    if (s.activeString != null) {
-      final idx = s.mode.semitones
-          .indexOf(s.activeString!.semitoneIndex);
-      if (idx >= 0) {
-        // 弦序号从 6→1（低到高），数组顺序即弦序
-        final stringNo = s.mode.semitones.length - idx;
-        return '${s.noteLabel}($stringNo)';
-      }
+  /// 弦条标签: 音名(弦号)——初学者友好；半音阶模式或找不到时纯音名
+  String stringNoOf(StringTarget target) {
+    final s = widget.controller.state;
+    final idx = s.mode.semitones.indexOf(target.semitoneIndex);
+    if (idx >= 0 && s.mode.semitones.isNotEmpty) {
+      return '${target.name}(${s.mode.semitones.length - idx})';
     }
-    return s.noteLabel;
+    return target.name;
   }
 
   /// 状态引导语：告诉用户下一步做什么，替代"未检测到信号"。
@@ -506,6 +488,79 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
         : (s.cents < -8 ? '向 ${target.name} 拧松…' : '微调…');
   }
 
+  String _gateLabel(String gate) => switch (gate) {
+        'low' => '宽松（安静房间）',
+        'high' => '严格（嘈杂环境）',
+        _ => '标准（日常）',
+      };
+
+  /// 圆角下拉选择器：选项列表也是圆角容器+圆角高亮，风格与弹窗一致
+  Future<String?> _showGatePicker(BuildContext ctx, KitharaTheme t) {
+    return showModalBottomSheet<String>(
+      context: ctx,
+      backgroundColor: t.popBg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8, left: 4),
+                child: Text('降噪灵敏度',
+                    style: TextStyle(color: t.text2, fontSize: 13)),
+              ),
+              for (final (label, val) in [
+                ('宽松（安静房间）', 'low'),
+                ('标准（日常）', 'medium'),
+                ('严格（嘈杂环境）', 'high'),
+              ])
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () {
+                      widget.haptics?.selectionClick();
+                      Navigator.pop(sheetCtx, val);
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: widget.noiseGate == val
+                            ? t.accentSoft
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: widget.noiseGate == val
+                              ? t.accent
+                              : Colors.transparent,
+                        ),
+                      ),
+                      child: Text(label,
+                          style: TextStyle(
+                            color: widget.noiseGate == val
+                                ? t.text
+                                : t.text2,
+                            fontWeight: widget.noiseGate == val
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                          )),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showSettingsDialog(BuildContext context) {
     final t = widget.theme;
     showDialog<void>(
@@ -518,27 +573,39 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('降噪灵敏度', style: TextStyle(color: t.text2, fontSize: 14)),
-            const SizedBox(height: 4),
-            DropdownButton<String>(
+            const SizedBox(height: 8),
+            // 自绘下拉触发器（圆角容器，与弹窗风格统一）
+            InkWell(
               key: const Key('noise_gate_dropdown'),
-              value: widget.noiseGate,
-              isExpanded: true,
-              underline: const SizedBox.shrink(),
-              dropdownColor: t.popBg,
-              items: const [
-                DropdownMenuItem(
-                    value: 'low', child: Text('宽松（安静房间）')),
-                DropdownMenuItem(
-                    value: 'medium', child: Text('标准（日常）')),
-                DropdownMenuItem(
-                    value: 'high', child: Text('严格（嘈杂环境）')),
-              ],
-              onChanged: (v) {
-                if (v == null || v == widget.noiseGate) return;
+              borderRadius: BorderRadius.circular(12),
+              onTap: () async {
                 widget.haptics?.selectionClick();
-                widget.onNoiseGateChanged?.call(v);
-                Navigator.pop(ctx);
+                final picked = await _showGatePicker(ctx, t);
+                if (picked != null && picked != widget.noiseGate) {
+                  widget.onNoiseGateChanged?.call(picked);
+                }
               },
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: t.surface2,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: t.borderStrong),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _gateLabel(widget.noiseGate),
+                        style: TextStyle(color: t.text, fontSize: 15),
+                      ),
+                    ),
+                    Icon(Icons.expand_more, color: t.text3, size: 20),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
@@ -651,15 +718,20 @@ class _StringBar extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 6),
-        Text(
-          target.name,
-          style: TextStyle(
-            color: inTune ? t.ok : (active ? t.text : t.text3),
-            fontSize: 12,
-            fontFeatures: const [FontFeature.tabularFigures()],
-            fontWeight: active || inTune ? FontWeight.w600 : FontWeight.w400,
-          ),
-        ),
+        Builder(builder: (ctx) {
+          // 弦号: 所在 TunerScreen 传入（通过 target 顺序推断不便，从 widget 层拿）
+          return Text(
+            ctx.findAncestorStateOfType<_TunerScreenState>()
+                    ?.stringNoOf(target) ??
+                target.name,
+            style: TextStyle(
+              color: inTune ? t.ok : (active ? t.text : t.text3),
+              fontSize: 12,
+              fontFeatures: const [FontFeature.tabularFigures()],
+              fontWeight: active || inTune ? FontWeight.w600 : FontWeight.w400,
+            ),
+          );
+        }),
       ],
     );
   }
