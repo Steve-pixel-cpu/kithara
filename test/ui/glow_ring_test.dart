@@ -16,6 +16,9 @@ class _Granted implements MicPermission {
 class _NoHaptics implements Haptics {
   @override
   void inTunePulse() {}
+
+  @override
+  void selectionClick() {}
 }
 
 

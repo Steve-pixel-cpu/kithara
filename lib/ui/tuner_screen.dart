@@ -229,7 +229,10 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                     children: [
                       InkWell(
                         key: const Key('theme_toggle'),
-                        onTap: widget.onThemeToggle,
+                        onTap: () {
+                          widget.haptics?.selectionClick();
+                          widget.onThemeToggle?.call();
+                        },
                         borderRadius: BorderRadius.circular(20),
                         child: Padding(
                           padding: const EdgeInsets.all(8),
@@ -355,9 +358,10 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                   children: [
                     for (final st in s.mode.strings)
                       Expanded(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(10),
                           onTap: () {
+                            widget.haptics?.selectionClick();
                             widget.controller.selectString(st.semitoneIndex);
                             widget.onSelectString?.call(st.semitoneIndex);
                           },

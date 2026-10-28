@@ -19,6 +19,9 @@ class _Granted implements MicPermission {
 class _NoHaptics implements Haptics {
   @override
   void inTunePulse() {}
+
+  @override
+  void selectionClick() {}
 }
 
 Widget harness(TunerController controller, KitharaTheme theme) {
@@ -155,6 +158,21 @@ void main() {
         tester.widget<Scaffold>(find.byType(Scaffold).first).backgroundColor,
         const Color(0xFF0A0A0D),
       );
+    });
+
+    testWidgets('弦条 LED 点击有水波纹反馈（InkWell 包裹而非裸 GestureDetector）', (tester) async {
+      final controller = TunerController();
+      await tester.pumpWidget(harness(controller, KitharaTheme.dark));
+      await tester.pump();
+      await tester.pump();
+      // LED 顶层应是 InkWell（Material 触感反馈），裸 GestureDetector 没有视觉反馈
+      final ink = tester.widget<InkWell>(
+        find.ancestor(
+          of: find.byKey(const Key('led_D3')),
+          matching: find.byType(InkWell),
+        ).first,
+      );
+      expect(ink.onTap, isNotNull);
     });
 
     testWidgets('onThemeToggle 回调被调用', (tester) async {

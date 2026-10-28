@@ -8,8 +8,12 @@ import 'package:kithara/ui/tuner_screen.dart';
 /// 可注入假触觉的测试替身。
 class FakeHaptics implements Haptics {
   int inTunePulses = 0;
+  int selectionClicks = 0;
   @override
   void inTunePulse() => inTunePulses++;
+
+  @override
+  void selectionClick() => selectionClicks++;
 }
 
 class FakeMicPermission implements MicPermission {

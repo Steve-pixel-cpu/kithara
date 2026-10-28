@@ -21,9 +21,15 @@ class MicPermissionImpl implements MicPermission {
 /// 触觉抽象（测试注入用）。
 abstract class Haptics {
   void inTunePulse();
+
+  /// 轻点反馈——跟随系统"触摸振动"设置（用户关闭则系统自动不出振动）
+  void selectionClick();
 }
 
 class HapticsImpl implements Haptics {
   @override
   void inTunePulse() => unawaited(HapticFeedback.mediumImpact());
+
+  @override
+  void selectionClick() => unawaited(HapticFeedback.selectionClick());
 }
