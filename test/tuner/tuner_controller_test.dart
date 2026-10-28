@@ -68,6 +68,23 @@ void main() {
     expect(controller.state.noteLabel, 'E3');
   });
 
+  test('会话调准记忆: 调准过的弦保持 tuned 标记, 换弦不清, 切模式清', () {
+    final controller = TunerController();
+    // 调准 6 弦 E2
+    controller.onPitch(82.41 * 1.001, 0.95);
+    expect(controller.state.tunedSemis, contains(-29), reason: 'E2 调准后记入');
+    // 转去调 5 弦（不调准）—— E2 标记仍在
+    controller.onPitch(110.0 * 1.02, 0.95); // A2 偏 +34¢ 未准
+    expect(controller.state.tunedSemis, contains(-29), reason: '换弦不清记忆');
+    expect(controller.state.tunedSemis, isNot(contains(-24)));
+    // 调准 A2 → 两个标记
+    controller.onPitch(110.0 * 1.001, 0.95);
+    expect(controller.state.tunedSemis, containsAll([-29, -24]));
+    // 切模式 → 清空
+    controller.setMode(TuningModes.dropD);
+    expect(controller.state.tunedSemis, isEmpty);
+  });
+
   test('量程自适应: |cents|<=50 用 ±50 档, 大偏差自动扩档', () {
     final controller = TunerController();
     controller.selectString(-29); // 锁 E2

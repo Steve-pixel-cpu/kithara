@@ -476,6 +476,7 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                             inTune: s.activeString?.semitoneIndex ==
                                     st.semitoneIndex &&
                                 s.inTune,
+                            tuned: s.tunedSemis.contains(st.semitoneIndex),
                           ),
                         ),
                       ),
@@ -730,6 +731,7 @@ class _StringBar extends StatelessWidget {
     required this.t,
     required this.active,
     required this.inTune,
+    this.tuned = false,
   });
 
   final StringTarget target;
@@ -737,34 +739,45 @@ class _StringBar extends StatelessWidget {
   final bool active;
   final bool inTune;
 
+  /// 会话内已调准（持久淡绿, 不随信号消失）
+  final bool tuned;
+
   @override
   Widget build(BuildContext context) {
-    // LED 胶囊：默认暗块，active 亮白描边，inTune 绿色常亮
+    // LED 四态: inTune 亮绿+辉光 > tuned 持久淡绿 > active 亮白 > 灰
+    final ledColor = inTune
+        ? t.ok
+        : (tuned
+            ? t.ok.withValues(alpha: 0.45)
+            : (active ? t.text : t.surface3));
     return Column(
       children: [
         Container(
           height: 10,
           margin: const EdgeInsets.symmetric(horizontal: 6),
           decoration: BoxDecoration(
-            color: inTune
-                ? t.ok
-                : (active ? t.text : t.surface3),
+            color: ledColor,
             borderRadius: BorderRadius.circular(5),
             boxShadow: inTune
                 ? [BoxShadow(color: t.ok.withValues(alpha: 0.45), blurRadius: 10)]
-                : (active
-                    ? [BoxShadow(color: t.text.withValues(alpha: 0.25), blurRadius: 6)]
-                    : null),
+                : (tuned
+                    ? [BoxShadow(color: t.ok.withValues(alpha: 0.18), blurRadius: 5)]
+                    : (active
+                        ? [BoxShadow(color: t.text.withValues(alpha: 0.25), blurRadius: 6)]
+                        : null)),
           ),
         ),
         const SizedBox(height: 6),
         Text(
           target.name,
           style: TextStyle(
-            color: inTune ? t.ok : (active ? t.text : t.text3),
+            color: inTune || tuned
+                ? t.ok
+                : (active ? t.text : t.text3),
             fontSize: 12,
             fontFeatures: const [FontFeature.tabularFigures()],
-            fontWeight: active || inTune ? FontWeight.w600 : FontWeight.w400,
+            fontWeight:
+                active || inTune || tuned ? FontWeight.w600 : FontWeight.w400,
           ),
         ),
       ],

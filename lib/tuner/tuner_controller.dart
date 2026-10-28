@@ -17,6 +17,7 @@ class TunerState {
     required this.activeString,
     required this.inTune,
     required this.range,
+    required this.tunedSemis,
   });
 
   final TuningMode mode;
@@ -34,6 +35,10 @@ class TunerState {
 
   /// 当前量程（±音分）: 50 精调 / 250 / 500 粗调（大偏差自动扩档）
   final int range;
+
+  /// 本次会话已调准的弦（半音索引集合）——调准过的弦保持淡绿标记，
+  /// 切模式清空
+  final Set<int> tunedSemis;
 }
 
 /// 调音器控制器：接收音高帧，维护状态，通知 UI。
@@ -64,6 +69,9 @@ class TunerController extends ChangeNotifier {
 
   // 量程自适应: 滞回扩档（扩档阈值 95%/缩档 75% 防边界抖动）
   int _range = 50;
+
+  // 会话调准记忆
+  final Set<int> _tunedSemis = {};
 
   /// 锁定保持：调准后信号丢失仍保持锁定视觉 2s（拨弦衰减是常态，
   /// 绿色不该随音量消失而闪灭）。实现为时间戳比较——无 Timer、无泄漏，
@@ -97,6 +105,7 @@ class TunerController extends ChangeNotifier {
       activeString: _active,
       inTune: inTune,
       range: _range,
+      tunedSemis: _tunedSemis,
     );
   }
 
@@ -162,6 +171,7 @@ class TunerController extends ChangeNotifier {
       _cents = _semitonesFrom(f, lockedSemi);
       _updateRange();
       _needle = (_cents / _range).clamp(-1.0, 1.0);
+      _recordTuned();
       // 显示音名 = 目标弦音名（初学者视角: 正在调这根弦，不随检测跳）
       _noteLabel = _mapper.noteName(lockedSemi);
       _noteSemi = lockedSemi;
@@ -189,7 +199,17 @@ class TunerController extends ChangeNotifier {
     _cents = matchSmoothed?.cents ?? _mapper.centsOffset(smoothed);
     _updateRange();
     _needle = (_cents / _range).clamp(-1.0, 1.0);
+    _recordTuned();
     notifyListeners();
+  }
+
+  /// 会话记忆: liveTune（真实信号在 ±5¢ 内）时把目标弦记入 tuned 集
+  void _recordTuned() {
+    final liveTune =
+        _active != null && _cents.abs() <= 5.0 && _hasSignal;
+    if (liveTune) {
+      _tunedSemis.add(_active!.semitoneIndex);
+    }
   }
 
   /// 滞回扩档: |cents| 超当前量程 95% -> 扩档(50->250->500);
@@ -267,6 +287,7 @@ class TunerController extends ChangeNotifier {
     _noteSemi = null;
     _noteCandidateSemi = null;
     _manualLock = false;
+    _tunedSemis.clear();
     notifyListeners();
   }
 
