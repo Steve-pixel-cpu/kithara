@@ -12,22 +12,32 @@ import 'ui/tuner_screen.dart';
 
 void main() => runApp(const KitharaApp());
 
-class KitharaApp extends StatelessWidget {
+class KitharaApp extends StatefulWidget {
   const KitharaApp({super.key});
+
+  @override
+  State<KitharaApp> createState() => _KitharaAppState();
+}
+
+class _KitharaAppState extends State<KitharaApp> {
+  KitharaTheme _theme = KitharaTheme.dark;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Kithara',
-      theme: KitharaTheme.dark.toThemeData(),
-      home: const _TunerHome(),
+      theme: _theme.toThemeData(),
+      home: _TunerHome(onThemeChanged: (t) => setState(() => _theme = t)),
     );
   }
 }
 
 /// 装配根：设置加载 → controller → 管线（Ticker 驱动）→ 屏幕。
+/// 主题状态在这里持有（切换按钮 → setState → 全应用生效）。
 class _TunerHome extends StatefulWidget {
-  const _TunerHome();
+  const _TunerHome({this.onThemeChanged});
+
+  final ValueChanged<KitharaTheme>? onThemeChanged;
 
   @override
   State<_TunerHome> createState() => _TunerHomeState();
@@ -38,6 +48,7 @@ class _TunerHomeState extends State<_TunerHome> {
   final MicStream _mic = MicStream();
   late final TunerPipelineBridge _bridge;
   Ticker? _ticker;
+  KitharaTheme _theme = KitharaTheme.dark;
 
   @override
   void initState() {
@@ -73,7 +84,14 @@ class _TunerHomeState extends State<_TunerHome> {
       mic: _mic,
       micPermission: MicPermissionImpl(_mic),
       haptics: HapticsImpl(),
-      theme: KitharaTheme.dark,
+      theme: _theme,
+      onThemeToggle: () {
+        final next = _theme.brightness == Brightness.dark
+            ? KitharaTheme.light
+            : KitharaTheme.dark;
+        setState(() => _theme = next);
+        widget.onThemeChanged?.call(next);
+      },
     );
   }
 }

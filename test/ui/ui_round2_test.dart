@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kithara/audio/mic_stream.dart';
+import 'package:kithara/main.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:kithara/theme/kithara_theme.dart';
 import 'package:kithara/tuner/tuner_controller.dart';
 import 'package:kithara/ui/platform_services.dart';
@@ -117,6 +119,42 @@ void main() {
       await tester.pumpAndSettle();
       // 切换回调触发了（screen 无内部状态，由回调通知外部换主题）
       expect(find.byKey(const Key('theme_toggle')), findsOneWidget);
+    });
+
+    testWidgets('KitharaApp 装配: 点主题按钮全应用变浅色（Scaffold 实色切换）', (tester) async {
+      // mock record
+      const channel = MethodChannel('com.llfbandit.record/messages');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'hasPermission' || call.method == 'isRecording') {
+          return true;
+        }
+        return null;
+      });
+      // 拦截 SharedPreferences
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(const KitharaApp());
+      await tester.pump();
+      await tester.pump();
+      expect(
+        tester.widget<Scaffold>(find.byType(Scaffold).first).backgroundColor,
+        const Color(0xFF0A0A0D), // 深色 OLED
+      );
+      await tester.tap(find.byKey(const Key('theme_toggle')));
+      await tester.pump();
+      await tester.pump();
+      expect(
+        tester.widget<Scaffold>(find.byType(Scaffold).first).backgroundColor,
+        const Color(0xFFFCFCFD), // 浅色
+      );
+      // 再点回深色
+      await tester.tap(find.byKey(const Key('theme_toggle')));
+      await tester.pump();
+      await tester.pump();
+      expect(
+        tester.widget<Scaffold>(find.byType(Scaffold).first).backgroundColor,
+        const Color(0xFF0A0A0D),
+      );
     });
 
     testWidgets('onThemeToggle 回调被调用', (tester) async {
