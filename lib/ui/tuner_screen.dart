@@ -20,7 +20,9 @@ class TunerScreen extends StatefulWidget {
     this.haptics,
     this.theme = KitharaTheme.dark,
     this.themeMode = 'dark',
+    this.noiseGate = 'medium',
     this.onThemeToggle,
+    this.onNoiseGateChanged,
     this.onSelectString,
   });
 
@@ -37,6 +39,10 @@ class TunerScreen extends StatefulWidget {
 
   /// 主题模式：'system' 跟随系统亮度（覆盖 theme 字段），'light'/'dark' 固定。
   final String themeMode;
+
+  /// 降噪档位 'low' | 'medium' | 'high'（显示 + 修改回调）
+  final String noiseGate;
+  final ValueChanged<String>? onNoiseGateChanged;
 
   /// 主题切换回调（主题所有权在装配层/外部）。
   final VoidCallback? onThemeToggle;
@@ -517,6 +523,49 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                   label: value.toStringAsFixed(1),
                   onChanged: (v) => setState(() => value = v),
                 ),
+              ),
+              const SizedBox(height: 8),
+              // 降噪档位
+              Text('降噪灵敏度', style: TextStyle(color: t.text2, fontSize: 14)),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  for (final (label, val) in [
+                    ('宽松', 'low'),
+                    ('标准', 'medium'),
+                    ('严格', 'high'),
+                  ])
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(
+                              color: widget.noiseGate == val
+                                  ? t.accent
+                                  : t.borderStrong,
+                            ),
+                            backgroundColor: widget.noiseGate == val
+                                ? t.accentSoft
+                                : Colors.transparent,
+                          ),
+                          onPressed: () {
+                            widget.haptics?.selectionClick();
+                            widget.onNoiseGateChanged?.call(val);
+                          },
+                          child: Text(
+                            label,
+                            style: TextStyle(
+                              color: widget.noiseGate == val
+                                  ? t.text
+                                  : t.text2,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ],
           ),

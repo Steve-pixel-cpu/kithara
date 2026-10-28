@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'fft.dart';
@@ -12,6 +13,7 @@ class PitchDetector {
     this.window = 4096,
     this.minFreq = 65.0,
     this.maxFreq = 350.0,
+    this.rmsGate = 0.0,
   })  : _fftSize = window * 2, // 零填充一倍：循环自相关在 lag<window 内 == 线性自相关
         _fft = FFT(window * 2),
         _re = Float64List(window * 2),
@@ -25,6 +27,11 @@ class PitchDetector {
   final int window;
   final double minFreq;
   final double maxFreq;
+
+  /// 输入级 RMS 门限（0=关闭）。低于门限的帧直接判无信号，
+  /// 连 NSDF 都不计算——挡环境底噪/远场噪声，还省电。
+  final double rmsGate;
+
   late final int maxLag;
 
   final FFT _fft;
@@ -41,6 +48,19 @@ class PitchDetector {
   double? detect(Float32List frame) {
     assert(frame.length == window);
     final n = window;
+
+    // 0. RMS 门控（降噪第一道闸：环境底噪直接拒绝，省掉整个 FFT）
+    if (rmsGate > 0) {
+      var sumSq = 0.0;
+      for (var i = 0; i < n; i++) {
+        sumSq += frame[i] * frame[i];
+      }
+      final rms = math.sqrt(sumSq / n);
+      if (rms < rmsGate) {
+        _confidence = 0.0;
+        return null;
+      }
+    }
 
     // 1. 去直流
     var mean = 0.0;

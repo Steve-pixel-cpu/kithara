@@ -22,7 +22,15 @@ class KitharaApp extends StatefulWidget {
 class _KitharaAppState extends State<KitharaApp> {
   /// 'system' | 'light' | 'dark'（循环切换：dark → light → system → dark）
   String _themeMode = 'system';
+  String _noiseGate = 'medium';
   bool _settingsRestored = false;
+
+  bool get _effectiveDark =>
+      _themeMode == 'system'
+          ? WidgetsBinding
+              .instance.platformDispatcher.platformBrightness ==
+              Brightness.dark
+          : _themeMode == 'dark';
 
   @override
   void initState() {
@@ -30,7 +38,10 @@ class _KitharaAppState extends State<KitharaApp> {
     TunerSettings.load().then((s) {
       // 用户若在恢复完成前已切换，恢复值不覆盖用户选择（竞态防护）
       if (mounted && !_settingsRestored) {
-        setState(() => _themeMode = s.themeMode);
+        setState(() {
+          _themeMode = s.themeMode;
+          _noiseGate = s.noiseGate;
+        });
       }
     });
   }
@@ -38,22 +49,22 @@ class _KitharaAppState extends State<KitharaApp> {
   void _handleThemeModeChanged(String mode) {
     _settingsRestored = true;
     setState(() => _themeMode = mode);
-    // 同步 isDark 兼容字段 + 持久化 themeMode
-    final platDark = WidgetsBinding
-            .instance.platformDispatcher.platformBrightness ==
-        Brightness.dark;
-    final effDark = mode == 'system'
-        ? platDark
-        : mode == 'dark';
-    TunerSettings().save(
-      _homeKey.currentState?.bridge.lastSavedModeId ?? 'standard',
-      _homeKey.currentState?.bridge.lastSavedA4 ?? 440.0,
-      isDark: effDark,
-      themeMode: mode,
-    );
+    // 主题持久化（含 mode/a4 合并写入）
+    _saveSettings(themeMode: mode);
   }
 
   final _homeKey = GlobalKey<_TunerHomeState>();
+
+  /// 统一保存入口：mode/a4 + 主题一起落盘（桥与主题切换共用）
+  void _saveSettings({String? modeId, double? a4, String? themeMode}) {
+    TunerSettings().save(
+      modeId ?? _homeKey.currentState?.bridge.lastSavedModeId ?? 'standard',
+      a4 ?? _homeKey.currentState?.bridge.lastSavedA4 ?? 440.0,
+      isDark: _effectiveDark,
+      themeMode: themeMode ?? _themeMode,
+      noiseGate: _noiseGate,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -71,7 +82,13 @@ class _KitharaAppState extends State<KitharaApp> {
         key: _homeKey,
         theme: theme,
         themeMode: _themeMode,
+        noiseGate: _noiseGate,
         onThemeModeChanged: _handleThemeModeChanged,
+        onNoiseGateChanged: (g) {
+          setState(() => _noiseGate = g);
+          _saveSettings();
+        },
+        settingsSaver: (modeId, a4) => _saveSettings(modeId: modeId, a4: a4),
       ),
     );
   }
@@ -84,12 +101,18 @@ class _TunerHome extends StatefulWidget {
     super.key,
     this.theme,
     this.themeMode,
+    this.noiseGate,
     this.onThemeModeChanged,
+    this.onNoiseGateChanged,
+    required this.settingsSaver,
   });
 
   final KitharaTheme? theme;
   final String? themeMode;
+  final String? noiseGate;
   final ValueChanged<String>? onThemeModeChanged;
+  final ValueChanged<String>? onNoiseGateChanged;
+  final void Function(String modeId, double a4) settingsSaver;
 
   @override
   State<_TunerHome> createState() => _TunerHomeState();
@@ -110,7 +133,8 @@ class _TunerHomeState extends State<_TunerHome> {
     _bridge = TunerPipelineBridge(
       controller: _controller,
       mic: _mic,
-      onSave: (modeId, a4) => TunerSettings().save(modeId, a4),
+      // App 层统一保存（mode/a4 + 当前主题一起落盘，不互相覆盖）
+      onSave: widget.settingsSaver,
     );
     _restoreSettings();
     _ticker = Ticker((_) => _bridge.tick());
@@ -142,6 +166,8 @@ class _TunerHomeState extends State<_TunerHome> {
       haptics: HapticsImpl(),
       theme: widget.theme ?? KitharaTheme.dark,
       themeMode: widget.themeMode ?? 'dark',
+      noiseGate: widget.noiseGate ?? 'medium',
+      onNoiseGateChanged: widget.onNoiseGateChanged,
       onThemeToggle: () {
         // 三态循环: dark → light → system → dark
         final cur = widget.themeMode ?? 'dark';
@@ -164,32 +190,42 @@ class TunerPipelineBridge {
     required this.controller,
     required this.mic,
     required this.onSave,
+    this.noiseGate = 'medium',
   });
 
   final TunerController controller;
   final MicStream mic;
   final void Function(String modeId, double a4) onSave;
 
-  PitchDetector _detector = PitchDetector();
+  /// 降噪档位 'low' | 'medium' | 'high' → RMS 门限映射
+  static const _gateRms = {'low': 0.0, 'medium': 0.008, 'high': 0.02};
+
+  String noiseGate;
+  PitchDetector _detector = PitchDetector(
+      rmsGate: _gateRms['medium']!);
   TuningMode? _lastMode;
-  double _lastA4 = 0;
+  double? _lastA4;
+  String _lastGate = 'medium';
 
   String get lastSavedModeId => _lastMode?.id ?? 'standard';
-  double get lastSavedA4 => _lastA4 == 0 ? 440.0 : _lastA4;
+  double get lastSavedA4 => _lastA4 ?? 440.0;
 
   void tick() {
-    // 设置变更检测（含首次），变更即持久化；
-    // 模式切换时按模式声明重建检测器（尤克里里等需要不同检测范围）
+    // 设置变更检测（含首次）：模式/降噪变更 → 重建检测器；变更即持久化
     final s = controller.state;
-    if (_lastMode == null || s.mode.id != _lastMode!.id || s.a4 != _lastA4) {
+    if (noiseGate != _lastGate) {
+      _lastGate = noiseGate;
+      _detector = _buildDetector(s.mode);
+    }
+    if (_lastMode == null ||
+        s.mode.id != _lastMode!.id ||
+        _lastA4 == null ||
+        s.a4 != _lastA4) {
       final modeChanged = _lastMode != null && s.mode.id != _lastMode!.id;
       _lastMode = s.mode;
       _lastA4 = s.a4;
       if (modeChanged) {
-        _detector = PitchDetector(
-          minFreq: s.mode.detectorMinFreq,
-          maxFreq: s.mode.detectorMaxFreq,
-        );
+        _detector = _buildDetector(s.mode);
       }
       onSave(s.mode.id, s.a4);
     }
@@ -197,4 +233,10 @@ class TunerPipelineBridge {
     if (window == null) return;
     controller.onPitch(_detector.detect(window), _detector.lastConfidence);
   }
+
+  PitchDetector _buildDetector(TuningMode mode) => PitchDetector(
+        minFreq: mode.detectorMinFreq,
+        maxFreq: mode.detectorMaxFreq,
+        rmsGate: _gateRms[noiseGate] ?? 0.008,
+      );
 }

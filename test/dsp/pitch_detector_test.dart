@@ -81,6 +81,27 @@ void main() {
     expect(det.detect(synth(50.0)), isNull); // < 65
   });
 
+  test('RMS 门控: 低于阈值的弱信号直接拒绝（降噪）', () {
+    final gated = PitchDetector(minFreq: 65, maxFreq: 350, rmsGate: 0.02);
+    // 弱合成信号（幅度 0.01，RMS ~0.008 < 0.02）→ null
+    final weak = synth(110.0);
+    for (var i = 0; i < weak.length; i++) {
+      weak[i] *= 0.03;
+    }
+    expect(gated.detect(weak), isNull);
+    expect(gated.lastConfidence, 0.0);
+    // 正常幅度 → 检出
+    expect(gated.detect(synth(110.0)), isNotNull);
+  });
+
+  test('默认无门控（rmsGate=0）：弱信号也能检出（原行为）', () {
+    final weak = synth(110.0);
+    for (var i = 0; i < weak.length; i++) {
+      weak[i] *= 0.05;
+    }
+    expect(det.detect(weak), isNotNull);
+  });
+
   test('ukulele 范围 (240-500Hz): 392/261.63/440Hz 检出（默认范围外）', () {
     final ukeDet = PitchDetector(minFreq: 240, maxFreq: 500);
     for (final f in [392.0, 261.63, 440.0]) {

@@ -40,6 +40,18 @@ void main() {
     expect(loaded.themeMode, 'light');
   });
 
+  test('noiseGate 档位持久化: low/medium/high', () async {
+    SharedPreferences.setMockInitialValues({'noiseGate': 'high'});
+    final loaded = await TunerSettings.load();
+    expect(loaded.noiseGate, 'high');
+  });
+
+  test('noiseGate 非法值回退 medium', () async {
+    SharedPreferences.setMockInitialValues({'noiseGate': 'loud'});
+    final loaded = await TunerSettings.load();
+    expect(loaded.noiseGate, 'medium');
+  });
+
   test('themeMode 非法值回退 system', () async {
     SharedPreferences.setMockInitialValues({'themeMode': 'bogus'});
     final loaded = await TunerSettings.load();
@@ -50,6 +62,16 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final loaded = await TunerSettings.load();
     expect(loaded.themeMode, 'system');
+  });
+
+  test('save 只更新 mode/a4 时不覆盖已存 themeMode', () async {
+    SharedPreferences.setMockInitialValues({'themeMode': 'light'});
+    // 模拟桥 onSave：save 不传 themeMode → 保留原值
+    final before = await TunerSettings.load();
+    await TunerSettings().save(before.modeId, before.a4,
+        isDark: before.isDark, themeMode: before.themeMode);
+    final after = await TunerSettings.load();
+    expect(after.themeMode, 'light'); // 未被默认 system 覆盖
   });
 
   test('非法存储值回退默认', () async {
