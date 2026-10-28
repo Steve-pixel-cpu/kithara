@@ -330,7 +330,7 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                       Positioned(
                         left: 18,
                         bottom: 42,
-                        child: Text('-50',
+                        child: Text('-${s.range}',
                             style: TextStyle(
                               color: t.text3,
                               fontSize: 11,
@@ -342,7 +342,7 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                       Positioned(
                         right: 18,
                         bottom: 42,
-                        child: Text('+50',
+                        child: Text('+${s.range}',
                             style: TextStyle(
                               color: t.text3,
                               fontSize: 11,
@@ -418,16 +418,15 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 5),
                           decoration: BoxDecoration(
-                            color: t.accentSoft,
+                            color: t.okSoft, // 淡绿底, 无描边（参考样式）
                             borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: t.accent),
                           ),
                           child: Text(
                             _stringHint!,
                             style: TextStyle(
-                              color: t.text,
+                              color: t.ok,
                               fontSize: 13,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         )

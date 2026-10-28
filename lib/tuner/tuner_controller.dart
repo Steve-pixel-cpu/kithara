@@ -16,6 +16,7 @@ class TunerState {
     required this.needle,
     required this.activeString,
     required this.inTune,
+    required this.range,
   });
 
   final TuningMode mode;
@@ -30,6 +31,9 @@ class TunerState {
   final double needle;
   final StringTarget? activeString;
   final bool inTune;
+
+  /// 当前量程（±音分）: 50 精调 / 250 / 500 粗调（大偏差自动扩档）
+  final int range;
 }
 
 /// 调音器控制器：接收音高帧，维护状态，通知 UI。
@@ -57,6 +61,9 @@ class TunerController extends ChangeNotifier {
   // 3 帧中值滤波: 松弦时检测帧间乱跳（真实物理现象——低张力弦谐波失谐）,
   // 中位数天然免疫单帧毛刺, 比均值平滑不拖慢正常跟弦
   final List<double> _freqWindow = [];
+
+  // 量程自适应: 滞回扩档（扩档阈值 95%/缩档 75% 防边界抖动）
+  int _range = 50;
 
   /// 锁定保持：调准后信号丢失仍保持锁定视觉 2s（拨弦衰减是常态，
   /// 绿色不该随音量消失而闪灭）。实现为时间戳比较——无 Timer、无泄漏，
@@ -89,6 +96,7 @@ class TunerController extends ChangeNotifier {
       needle: _hasSignal ? _needle : _needle,
       activeString: _active,
       inTune: inTune,
+      range: _range,
     );
   }
 
@@ -152,7 +160,8 @@ class TunerController extends ChangeNotifier {
       while (f < target / 1.5) { f *= 2; } // 检测远低于目标 → 升八度（报的是低八度基频）
       while (f > target * 1.5) { f /= 2; } // 检测远高于目标 → 降八度（报的是泛音）
       _cents = _semitonesFrom(f, lockedSemi);
-      _needle = (_cents / 50.0).clamp(-1.0, 1.0);
+      _updateRange();
+      _needle = (_cents / _range).clamp(-1.0, 1.0);
       // 显示音名 = 目标弦音名（初学者视角: 正在调这根弦，不随检测跳）
       _noteLabel = _mapper.noteName(lockedSemi);
       _noteSemi = lockedSemi;
@@ -178,8 +187,24 @@ class TunerController extends ChangeNotifier {
     // cents 显示用滤波值（毛刺免疫）; 弦匹配/音名已由原始帧判定
     final matchSmoothed = _mode.matchString(smoothed);
     _cents = matchSmoothed?.cents ?? _mapper.centsOffset(smoothed);
-    _needle = (_cents / 50.0).clamp(-1.0, 1.0);
+    _updateRange();
+    _needle = (_cents / _range).clamp(-1.0, 1.0);
     notifyListeners();
+  }
+
+  /// 滞回扩档: |cents| 超当前量程 95% -> 扩档(50->250->500);
+  /// 低于更小档 75% -> 缩档。刻度标注跟随 range。
+  void _updateRange() {
+    final a = _cents.abs();
+    if (_range == 50 && a > 47.5) {
+      _range = 250;
+    } else if (_range == 250 && a > 237.5) {
+      _range = 500;
+    } else if (_range == 500 && a < 187.5) {
+      _range = 250;
+    } else if (_range == 250 && a < 48) {
+      _range = 50; // 回到 ±50 内即缩档（精调视角优先, 留边界余量）
+    }
   }
 
   /// 检测频率相对目标半音的音分差（可为任意大小，供粘性锁显示大偏差）

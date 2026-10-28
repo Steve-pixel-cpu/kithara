@@ -33,7 +33,10 @@ void main() {
     pipeline.tick();
     expect(controller.state.noteLabel, 'E2');
     expect(controller.state.cents, closeTo(-50, 3), reason: 'cents=${controller.state.cents}');
-    expect(controller.state.needle, closeTo(-1.0, 0.05), reason: 'needle=${controller.state.needle}');
+    // -50¢ 触发滞回扩档到 ±250, needle = -50/250 = -0.2（量程自适应后
+    // 满偏不再出现在恰好 ±50 处, 更大偏差才逐渐到边）
+    expect(controller.state.range, 250);
+    expect(controller.state.needle, closeTo(-0.2, 0.05), reason: 'needle=${controller.state.needle}');
   });
 
   test('尤克里里模式: 管线以模式声明的范围重建 detector（392Hz 可检出）', () {

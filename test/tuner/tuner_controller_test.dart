@@ -68,6 +68,30 @@ void main() {
     expect(controller.state.noteLabel, 'E3');
   });
 
+  test('量程自适应: |cents|<=50 用 ±50 档, 大偏差自动扩档', () {
+    final controller = TunerController();
+    controller.selectString(-29); // 锁 E2
+    expect(controller.state.range, 50);
+    // 拧紧到 -180¢ → 扩 ±250 档, needle = -180/250 = -0.72
+    for (var i = 0; i < 5; i++) {
+      controller.onPitch(82.41 * math.pow(2, -180 / 1200), 0.95);
+    }
+    expect(controller.state.range, 250);
+    expect(controller.state.needle, closeTo(-0.72, 0.02));
+    // 更远 -400¢ → ±500 档
+    for (var i = 0; i < 5; i++) {
+      controller.onPitch(82.41 * math.pow(2, -400 / 1200), 0.95);
+    }
+    expect(controller.state.range, 500);
+    expect(controller.state.needle, closeTo(-0.8, 0.02));
+    // 拧回接近: -40¢ → 回 ±50 档
+    for (var i = 0; i < 5; i++) {
+      controller.onPitch(82.41 * math.pow(2, -40 / 1200), 0.95);
+    }
+    expect(controller.state.range, 50);
+    expect(controller.state.needle, closeTo(-0.8, 0.02));
+  });
+
   test('松弦八度归一: 锁 E2 后检测在基频/2倍泛音间交替, 偏差方向恒定不遍历', () {
     final controller = TunerController();
     controller.selectString(-29); // 锁 E2 = 82.41Hz
@@ -103,8 +127,9 @@ void main() {
       expect((c - base).abs(), lessThan(25),
           reason: 'cents 序列 ${centsSeen.map((e) => e.toStringAsFixed(0)).join(",")} 应平滑');
     }
-    // needle 恒满偏（大偏差）
-    expect(controller.state.needle, -1.0);
+    // needle 稳定为负（真实偏差方向）且被量程归一（非 -1 满偏乱跳）
+    expect(controller.state.needle, lessThan(-0.3));
+    expect(controller.state.needle, greaterThan(-1.01));
   });
 
   test('手动粘性锁: 弹任意音不丢锁定, 偏差相对目标弦（很松的弦也能看到 -50 满偏）', () {
@@ -200,7 +225,9 @@ void main() {
     for (var i = 0; i < 5; i++) {
       controller.onPitch(440.0 * math.pow(2, 50 / 1200), 0.95); // +50¢
     }
-    expect(controller.state.needle, closeTo(1.0, 0.01));
+    // +50¢ 触发滞回扩档至 ±250: needle = 50/250 = 0.2（量程自适应）
+    expect(controller.state.range, 250);
+    expect(controller.state.needle, closeTo(0.2, 0.02));
     for (var i = 0; i < 5; i++) {
       controller.onPitch(440.0, 0.95);
     }
@@ -208,6 +235,6 @@ void main() {
     for (var i = 0; i < 5; i++) {
       controller.onPitch(440.0 * math.pow(2, -50 / 1200), 0.95); // -50¢
     }
-    expect(controller.state.needle, closeTo(-1.0, 0.01));
+    expect(controller.state.needle, closeTo(-0.2, 0.02));
   });
 }
