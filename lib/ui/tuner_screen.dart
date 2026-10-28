@@ -13,11 +13,16 @@ class TunerScreen extends StatefulWidget {
   const TunerScreen({
     super.key,
     required this.controller,
+    required this.mic,
     this.micPermission,
     this.haptics,
   });
 
   final TunerController controller;
+
+  /// 由装配层传入的唯一 MicStream 实例。本组件只负责 start/stop 生命周期，
+  /// 绝不自建实例（曾因自建第二实例导致管线读取空缓冲：拨弦无反应）。
+  final MicStream mic;
   final MicPermission? micPermission;
   final Haptics? haptics;
 
@@ -26,14 +31,12 @@ class TunerScreen extends StatefulWidget {
 }
 
 class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
-  MicStream? _mic;
   bool _micStarted = false;
   bool _permissionDenied = false;
   bool _wasInTune = false;
 
-  MicPermission get _perm => widget.micPermission ?? MicPermissionImpl(_ensureMic());
-
-  MicStream _ensureMic() => _mic ??= MicStream();
+  MicPermission get _perm =>
+      widget.micPermission ?? MicPermissionImpl(widget.mic);
 
   @override
   void initState() {
@@ -54,8 +57,7 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _startMic() async {
-    final mic = _ensureMic();
-    final ok = await mic.start();
+    final ok = await widget.mic.start();
     if (!mounted) return;
     setState(() {
       _permissionDenied = !ok;
@@ -65,7 +67,7 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
 
   Future<void> _stopMic() async {
     if (!_micStarted) return;
-    await _mic?.stop();
+    await widget.mic.stop();
     _micStarted = false;
   }
 
@@ -93,7 +95,6 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     widget.controller.removeListener(_onState);
     _stopMic();
-    _mic?.dispose();
     super.dispose();
   }
 

@@ -21,6 +21,9 @@ class MicStream {
   /// 麦克风权限是否已授予。
   Future<bool> hasPermission() => _recorder.hasPermission();
 
+  /// 是否正在采集（调试/测试用）。
+  Future<bool> isRecording() => _recorder.isRecording();
+
   /// 请求权限并开始采集。返回是否成功启动。
   Future<bool> start() async {
     if (await _recorder.isRecording()) return true;

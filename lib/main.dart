@@ -76,6 +76,7 @@ class _TunerHomeState extends State<_TunerHome> {
   Widget build(BuildContext context) {
     return TunerScreen(
       controller: _controller,
+      mic: _mic,
       micPermission: MicPermissionImpl(_mic),
       haptics: HapticsImpl(),
     );

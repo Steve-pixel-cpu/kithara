@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kithara/audio/mic_stream.dart';
 import 'package:kithara/tuner/tuner_controller.dart';
 import 'package:kithara/ui/tuner_screen.dart';
 
 void main() {
   Widget makeHarness({TunerController? controller}) {
     final c = controller ?? TunerController();
-    return MaterialApp(home: TunerScreen(controller: c));
+    return MaterialApp(home: TunerScreen(controller: c, mic: MicStream()));
   }
 
   testWidgets('渲染: 音名大字 + 仪表 + 6 弦条 + 模式按钮 + A4 显示', (tester) async {

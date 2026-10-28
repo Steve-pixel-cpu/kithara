@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kithara/audio/mic_stream.dart';
 import 'package:kithara/tuner/tuner_controller.dart';
 import 'package:kithara/ui/platform_services.dart';
 import 'package:kithara/ui/tuner_screen.dart';
@@ -24,6 +25,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: TunerScreen(
         controller: controller,
+        mic: MicStream(),
         micPermission: FakeMicPermission(false),
         haptics: FakeHaptics(),
       ),
@@ -38,6 +40,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: TunerScreen(
         controller: controller,
+        mic: MicStream(),
         micPermission: FakeMicPermission(true),
         haptics: FakeHaptics(),
       ),
@@ -53,6 +56,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: TunerScreen(
         controller: controller,
+        mic: MicStream(),
         micPermission: FakeMicPermission(true),
         haptics: haptics,
       ),
