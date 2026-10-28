@@ -220,7 +220,10 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                         ],
                       ),
                     ),
-                    onSelected: (m) => widget.controller.setMode(m),
+                    onSelected: (m) {
+                      widget.haptics?.selectionClick();
+                      widget.controller.setMode(m);
+                    },
                     itemBuilder: (_) => [
                       for (final m in TuningModes.all)
                         PopupMenuItem(
@@ -254,7 +257,10 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                       ),
                       Flexible(
                         child: InkWell(
-                          onTap: () => _showA4Dialog(context, s.a4),
+                          onTap: () {
+                            widget.haptics?.selectionClick();
+                            _showA4Dialog(context, s.a4);
+                          },
                           borderRadius: BorderRadius.circular(12),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
@@ -500,11 +506,15 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx),
+              onPressed: () {
+                widget.haptics?.selectionClick();
+                Navigator.pop(ctx);
+              },
               child: Text('取消', style: TextStyle(color: t.text2)),
             ),
             TextButton(
               onPressed: () {
+                widget.haptics?.selectionClick();
                 widget.controller.setA4(value);
                 Navigator.pop(ctx);
               },
