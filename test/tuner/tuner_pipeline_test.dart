@@ -20,6 +20,39 @@ Float32List synth(double f0, {int n = 5000}) {
 }
 
 void main() {
+  test('尤克里里模式: 管线以模式声明的范围重建 detector（392Hz 可检出）', () {
+    final rb = RingBuffer(8192);
+    final controller = TunerController();
+    final dropD = TuningModes.byId('drop_d');
+    final uke = TuningModes.byId('ukulele');
+    // 模拟桥的 detector 生命周期: 范围由模式声明
+    var detector = PitchDetector(
+        minFreq: dropD.detectorMinFreq, maxFreq: dropD.detectorMaxFreq);
+    final pipeline = TunerPipeline(
+      ringBuffer: rb,
+      detector: detector,
+      controller: controller,
+    );
+    controller.setMode(dropD);
+    rb.write(synth(110.0));
+    pipeline.tick();
+    expect(controller.state.noteLabel, 'A2');
+
+    // 切到 ukulele → 桥按声明重建
+    controller.setMode(uke);
+    detector = PitchDetector(
+        minFreq: uke.detectorMinFreq, maxFreq: uke.detectorMaxFreq);
+    final pipeline2 = TunerPipeline(
+      ringBuffer: rb,
+      detector: detector,
+      controller: controller,
+    );
+    rb.write(synth(392.0));
+    pipeline2.tick();
+    expect(controller.state.noteLabel, 'G4');
+    expect(controller.state.activeString!.name, 'G4');
+  });
+
   test('端到端: 110Hz 合成信号 → pipeline → controller 显示 A2 / inTune', () {
     final rb = RingBuffer(8192);
     final det = PitchDetector();

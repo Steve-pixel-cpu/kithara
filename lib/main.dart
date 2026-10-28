@@ -92,16 +92,24 @@ class TunerPipelineBridge {
   final MicStream mic;
   final void Function(String modeId, double a4) onSave;
 
-  final PitchDetector _detector = PitchDetector();
+  PitchDetector _detector = PitchDetector();
   TuningMode? _lastMode;
   double _lastA4 = 0;
 
   void tick() {
-    // 设置变更检测（含首次），变更即持久化
+    // 设置变更检测（含首次），变更即持久化；
+    // 模式切换时按模式声明重建检测器（尤克里里等需要不同检测范围）
     final s = controller.state;
     if (_lastMode == null || s.mode.id != _lastMode!.id || s.a4 != _lastA4) {
+      final modeChanged = _lastMode != null && s.mode.id != _lastMode!.id;
       _lastMode = s.mode;
       _lastA4 = s.a4;
+      if (modeChanged) {
+        _detector = PitchDetector(
+          minFreq: s.mode.detectorMinFreq,
+          maxFreq: s.mode.detectorMaxFreq,
+        );
+      }
       onSave(s.mode.id, s.a4);
     }
     final window = mic.ringBuffer.readWindow(_detector.window);

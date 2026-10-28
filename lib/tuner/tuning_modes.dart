@@ -21,16 +21,30 @@ class StringMatch {
   final double cents;
 }
 
-/// 一种调弦模式。semitones 为 6→1 弦（低→高）的半音索引，chromatic 为空。
+/// 一种调弦模式。semitones 为弦（低→高）的半音索引，chromatic 为空。
+/// [detectorMinFreq]/[detectorMaxFreq] 声明该模式的音高检测范围——
+/// 管线在模式切换时据此重建 PitchDetector（吉他 65-350，尤克里里需更高）。
 class TuningMode {
-  const TuningMode(this.id, this.label, this.semitones, {this.a4 = 440.0});
+  const TuningMode(
+    this.id,
+    this.label,
+    this.semitones, {
+    this.a4 = 440.0,
+    this.detectorMinFreq = 65.0,
+    this.detectorMaxFreq = 350.0,
+  });
 
   final String id;
   final String label;
   final List<int> semitones;
   final double a4;
+  final double detectorMinFreq;
+  final double detectorMaxFreq;
 
-  TuningMode withA4(double a4) => TuningMode(id, label, semitones, a4: a4);
+  TuningMode withA4(double a4) => TuningMode(id, label, semitones,
+      a4: a4,
+      detectorMinFreq: detectorMinFreq,
+      detectorMaxFreq: detectorMaxFreq);
 
   List<StringTarget> get strings =>
       [for (final n in semitones) StringTarget(n, a4)];
@@ -68,8 +82,24 @@ class TuningModes {
       TuningMode('dadgad', 'DADGAD', [-31, -24, -19, -14, -12, -7]);
   static const chromatic = TuningMode('chromatic', '半音阶', []);
 
+  // 尤克里里：re-entrant GCEA（高音G）/ Low G 线性 / Baritone DGBE
+  // 半音索引（相对 A4）：G4=-2, C4=-9, E4=-5, A4=0, G3=-12, D3=-7, B3=-2
+  static const ukulele = TuningMode(
+    'ukulele', '尤克里里', [-2, -9, -5, 0],
+    detectorMinFreq: 240, detectorMaxFreq: 500,
+  );
+  static const ukuleleLowG = TuningMode(
+    'ukulele_low_g', '尤克里里 Low G', [-14, -9, -5, 0],
+    detectorMinFreq: 180, detectorMaxFreq: 500,
+  );
+  static const ukuleleBaritone = TuningMode(
+    'ukulele_baritone', '尤克里里 Bari', [-19, -14, -10, -5],
+    detectorMinFreq: 140, detectorMaxFreq: 400,
+  );
+
   static const List<TuningMode> all = [
-    standard, dropD, openD, openG, dadgad, chromatic,
+    standard, dropD, openD, openG, dadgad,
+    ukulele, ukuleleLowG, ukuleleBaritone, chromatic,
   ];
 
   static TuningMode byId(String id, {double a4 = 440.0}) =>

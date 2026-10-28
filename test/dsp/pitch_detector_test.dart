@@ -81,6 +81,17 @@ void main() {
     expect(det.detect(synth(50.0)), isNull); // < 65
   });
 
+  test('ukulele 范围 (240-500Hz): 392/261.63/440Hz 检出（默认范围外）', () {
+    final ukeDet = PitchDetector(minFreq: 240, maxFreq: 500);
+    for (final f in [392.0, 261.63, 440.0]) {
+      final out = ukeDet.detect(synth(f));
+      expect(out, isNotNull, reason: 'freq=$f');
+      expect(out!, closeTo(f, 1.0), reason: 'freq=$f');
+    }
+    // 默认检测器(65-350)应拒绝 440Hz（证明范围声明的必要性）
+    expect(det.detect(synth(440.0)), isNull);
+  });
+
   test('chromatic 模式 500Hz 可检出', () {
     final wide = PitchDetector(minFreq: 60.0, maxFreq: 1300.0);
     final out = wide.detect(synth(500.0));

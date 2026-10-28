@@ -73,7 +73,9 @@ class PitchDetector {
       }
     }
     final specFreq = specBest * sampleRate / _fftSize;
-    if (specFreq > maxFreq * 1.35 || specFreq < minFreq * 0.55) {
+    // 预检阈值 1.2：功率谱主峰若明显高于 maxFreq（如 440Hz 输入吉他模式），
+    // 其 2×lag 子谐波伪峰会被 MPM 误报为 maxFreq 内的频率（实测 440→220）
+    if (specFreq > maxFreq * 1.2 || specFreq < minFreq * 0.55) {
       _confidence = 0.0;
       return null;
     }
