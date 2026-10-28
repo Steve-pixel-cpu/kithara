@@ -90,6 +90,9 @@ class TunerController extends ChangeNotifier {
   @visibleForTesting
   set nowForTest(DateTime Function() f) => _now = f;
 
+  bool _holdingLock() =>
+      _lockHoldUntil != null && _now().isBefore(_lockHoldUntil!);
+
   TunerState get state {
     final lockHeld = _lockHoldUntil != null &&
         _now().isBefore(_lockHoldUntil!);
@@ -101,7 +104,10 @@ class TunerController extends ChangeNotifier {
       hasSignal: _hasSignal,
       noteLabel: _noteLabel,
       cents: _cents,
-      needle: _hasSignal ? _needle : _needle,
+      // 常驻指针: 无信号且不在保持窗口 → 实时判 -1（-500 满偏待命）
+      needle: _hasSignal || _holdingLock()
+          ? _needle
+          : -1.0,
       activeString: _active,
       inTune: inTune,
       range: _range,
@@ -112,11 +118,17 @@ class TunerController extends ChangeNotifier {
   /// 管线送来一帧音高；freq=null 表示本帧无有效音高（静音/不可靠）。
   void onPitch(double? freq, double confidence) {
     if (freq == null) {
-      _hasSignal = false; // noteLabel/cents/needle/active 保留，UI 平滑
-      // 锁定保持窗口：已调准状态下信号消失，保持绿色 2s
+      _hasSignal = false; // noteLabel/cents/active 保留，UI 平滑
+      // 锁定保持窗口：已调准状态下信号消失，保持绿色 2s（needle 保持居中）
       final wasTuned = _active != null && _cents.abs() <= 5.0;
-      if (wasTuned) {
+      final holding = wasTuned ||
+          (_lockHoldUntil != null && _now().isBefore(_lockHoldUntil!));
+      if (wasTuned && _lockHoldUntil == null) {
         _lockHoldUntil = _now().add(_lockHoldDuration);
+      }
+      // 常驻指针: 无信号且不在保持窗口 → 回 -500 满偏待命
+      if (!holding) {
+        _needle = -1.0;
       }
       notifyListeners();
       return;

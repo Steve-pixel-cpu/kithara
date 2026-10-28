@@ -67,6 +67,15 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
     vsync: this,
     duration: const Duration(milliseconds: 3000),
   );
+  // 指针平滑：读数（滤波+归一后的稳定值）变化时 150ms 过渡。
+  // 关键区别于被删的弹簧系统: tween 只对显示值插值, 目标不追帧流——
+  // 每帧重设也无所谓, controller 层已保证 target 稳定
+  double _needleFrom = 0.0;
+  double _needleTo = 0.0;
+  late final AnimationController _needleTween = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 150),
+  );
 
   MicPermission get _perm =>
       widget.micPermission ?? MicPermissionImpl(widget.mic);
@@ -77,6 +86,8 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
     WidgetsBinding.instance.addObserver(this);
     widget.controller.addListener(_onState);
     _breathCtrl.repeat();
+    // 呼吸动画常转: 搭车驱动"时间依赖状态"（保持窗口过期后指针回 -500）
+    _breathCtrl.addListener(_syncNeedleTarget);
     _startup();
   }
 
@@ -124,9 +135,26 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
     }
   }
 
+  /// 指针目标同步: state.needle 变化（含保持窗口过期这种纯时间事件）→ tween
+  void _syncNeedleTarget() {
+    final s = widget.controller.state;
+    final newTarget = s.inTune ? 0.0 : s.needle;
+    if ((newTarget - _needleTo).abs() > 0.001) {
+      _needleFrom = _displayNeedleValue();
+      _needleTo = newTarget;
+      _needleTween.forward(from: 0);
+    }
+  }
+
+  double _displayNeedleValue() {
+    final t = Curves.easeOutCubic.transform(_needleTween.value);
+    return _needleFrom + (_needleTo - _needleFrom) * t;
+  }
+
   @override
   void dispose() {
     _stringHintTimer?.cancel();
+    _needleTween.dispose();
     _breathCtrl.dispose();
     WidgetsBinding.instance.removeObserver(this);
     widget.controller.removeListener(_onState);
@@ -141,6 +169,7 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
       widget.haptics?.inTunePulse();
     }
     _wasInTune = s.inTune;
+    _syncNeedleTarget();
     setState(() {});
   }
 
@@ -306,12 +335,13 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
             const Spacer(flex: 2),
             // 发光环仪表：环心音名大字 + cents；弹簧插值 needle
             Center(
-              child: Builder(
-                builder: (context) {
+              child: AnimatedBuilder(
+                animation: _needleTween,
+                builder: (context, anim) {
                   // 指针 = state.needle（滤波+八度归一+滞回后的稳定值）
-                  // 与引导语同源——指哪说哪; 曾用弹簧追帧, 松弦交替帧下
-                  // 弹簧被频繁重置永远停在起点附近(指针乱摆的根因)
-                  final display = s.inTune ? 0.0 : s.needle;
+                  // 与引导语同源; 显示层只做 150ms 平滑（不追帧流）
+                  final k = Curves.easeOutCubic.transform(_needleTween.value);
+                  final display = _needleFrom + (_needleTo - _needleFrom) * k;
                   return Stack(
                     alignment: Alignment.center,
                     children: [

@@ -141,6 +141,56 @@ void main() {
           reason: '音偏低必须提示拧紧');
     });
 
+    testWidgets('指针常驻: 无信号停在 -500 满偏待命, 检测后移到读数', (tester) async {
+      var now = DateTime(2026, 1, 1);
+      final controller = TunerController()..nowForTest = () => now;
+      await tester.pumpWidget(harness(controller, KitharaTheme.dark));
+      await tester.pump();
+      await tester.pump();
+      // 初始无信号: 指针在 -1 (满偏 -500 侧)
+      expect(controller.state.needle, -1.0);
+      // 检测到信号: 指针移到读数
+      controller.selectString(-29); // E2
+      for (var i = 0; i < 5; i++) {
+        controller.onPitch(82.41 * 1.001, 0.95);
+      }
+      expect(controller.state.needle, closeTo(0.0, 0.05), reason: '调准态居中');
+      // 信号消失(保持窗口后): 回到 -1 待命
+      controller.onPitch(null, 0.9);
+      // 多帧推进: 保持窗口过期(2s) + tween 收敛(150ms) 都需要帧序列
+      // (注入时钟随 fake 时间同步推进)
+      for (var d = 0; d < 12; d++) {
+        await tester.pump(const Duration(milliseconds: 300));
+        now = now.add(const Duration(milliseconds: 300));
+      }
+      expect(controller.state.hasSignal, isFalse);
+      expect(tester.widget<GlowRing>(find.byType(GlowRing)).needle,
+          closeTo(-1.0, 0.05),
+          reason: '回 -500 满偏待命');
+    });
+
+    testWidgets('指针平滑: 读数变化时 150ms 内连续过渡, 不瞬跳', (tester) async {
+      final controller = TunerController();
+      await tester.pumpWidget(harness(controller, KitharaTheme.dark));
+      await tester.pump();
+      await tester.pump();
+      controller.selectString(-29); // E2
+      // 稳定到 -180¢ (range 250, needle -0.72)
+      for (var i = 0; i < 5; i++) {
+        controller.onPitch(82.41 * math.pow(2, -180 / 1200), 0.95);
+      }
+      await tester.pump(const Duration(milliseconds: 300));
+// 阶跃到 -30¢
+      for (var i = 0; i < 5; i++) {
+        controller.onPitch(82.41 * math.pow(2, -30 / 1200), 0.95);
+      }
+      for (var d = 0; d < 10; d++) {
+        await tester.pump(const Duration(milliseconds: 40));
+      }
+      final after = tester.widget<GlowRing>(find.byType(GlowRing)).needle;
+      final target = controller.state.needle;
+      expect((after - target).abs(), lessThan(0.05), reason: '收敛到新读数');    });
+
     testWidgets('指针与引导语同源: 松弦交替帧下指针稳定在滤波偏差处（不追原始帧）', (tester) async {
       final controller = TunerController();
       await tester.pumpWidget(harness(controller, KitharaTheme.dark));
