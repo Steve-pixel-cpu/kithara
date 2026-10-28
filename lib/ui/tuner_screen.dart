@@ -513,6 +513,10 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
 
   /// 状态引导语：告诉用户下一步做什么，替代"未检测到信号"。
   String _guidance(TunerState s) {
+    // 大偏差（粘性锁下很松的弦）: 告诉用户还差多少, 指导拧紧
+    if (s.hasSignal && s.activeString != null && s.cents < -50) {
+      return '向 ${s.activeString!.name} 拧紧…（差 ${s.cents.abs().toStringAsFixed(0)}¢）';
+    }
     if (s.mode.semitones.isEmpty) {
       // 半音阶：无目标弦
       if (!s.hasSignal) return '拨响任意弦开始调音';

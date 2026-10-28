@@ -68,6 +68,36 @@ void main() {
     expect(controller.state.noteLabel, 'E3');
   });
 
+  test('手动粘性锁: 弹任意音不丢锁定, 偏差相对目标弦（很松的弦也能看到 -50 满偏）', () {
+    final controller = TunerController();
+    controller.selectString(-5); // E4 = 1弦
+    expect(controller.state.activeString!.name, 'E4');
+    // 弦很松: 260Hz 距 E4 约 -410¢（B3 附近, 自动模式下会吸走/清锁）
+    controller.onPitch(260.0, 0.95);
+    expect(controller.state.activeString!.name, 'E4', reason: '粘性锁不被自动匹配覆盖');
+    expect(controller.state.noteLabel, 'E4', reason: '显示目标音名而非检测音名');
+    expect(controller.state.cents, lessThan(-350), reason: 'cents=${controller.state.cents} 应约 -410');
+    expect(controller.state.needle, -1.0, reason: '满偏 -50 侧');
+    expect(controller.state.inTune, isFalse);
+    // 拧紧到 E4 附近 → inTune
+    controller.onPitch(329.63 * 1.001, 0.95);
+    expect(controller.state.inTune, isTrue);
+    // 再点同一弦 → 解锁回自动
+    controller.selectString(-5);
+    controller.onPitch(260.0, 0.95);
+    expect(controller.state.activeString, isNull, reason: '解锁后 260Hz 不吸附任何弦');
+  });
+
+  test('手动粘性锁: 换模式清除', () {
+    final controller = TunerController();
+    controller.selectString(-5); // E4
+    controller.setMode(TuningModes.dropD);
+    expect(controller.state.activeString, isNull);
+    controller.onPitch(329.63, 0.95);
+    // drop_d 里 E4 匹配 1 弦（半音距离 0）
+    expect(controller.state.activeString!.name, 'E4');
+  });
+
   test('锁弦: 字符串模式 2 次同弦才切换 activeString', () {
     // 先到 D3 附近一次
     controller.onPitch(146.83, 0.95);

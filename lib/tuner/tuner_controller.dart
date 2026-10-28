@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 
 import '../dsp/note_mapper.dart';
@@ -50,6 +52,7 @@ class TunerController extends ChangeNotifier {
   int _pendingCount = 0;
   int? _noteSemi; // 当前显示音名的半音索引
   int? _noteCandidateSemi; // 挂起中的新音名（需第 2 帧确认）
+  bool _manualLock = false; // 手动选弦粘性锁（自动匹配不覆盖）
 
   /// 锁定保持：调准后信号丢失仍保持锁定视觉 2s（拨弦衰减是常态，
   /// 绿色不该随音量消失而闪灭）。实现为时间戳比较——无 Timer、无泄漏，
@@ -130,6 +133,19 @@ class TunerController extends ChangeNotifier {
     }
     _noteLabel = _mapper.noteName(_noteSemi ?? newSemi);
 
+    if (_manualLock && _active != null) {
+      // 粘性锁：跳过自动匹配，偏差 = 检测音高 相对 锁定弦
+      final lockedSemi = _active!.semitoneIndex;
+      _cents = _semitonesFrom(freq, lockedSemi);
+      _needle = (_cents / 50.0).clamp(-1.0, 1.0);
+      // 显示音名 = 目标弦音名（初学者视角: 正在调这根弦，不随检测跳）
+      _noteLabel = _mapper.noteName(lockedSemi);
+      _noteSemi = lockedSemi;
+      _noteCandidateSemi = null;
+      notifyListeners();
+      return;
+    }
+
     final match = _mode.matchString(freq);
     if (_mode.semitones.isNotEmpty) {
       if (match == null) {
@@ -147,6 +163,12 @@ class TunerController extends ChangeNotifier {
     _cents = match?.cents ?? mapperCents;
     _needle = (_cents / 50.0).clamp(-1.0, 1.0);
     notifyListeners();
+  }
+
+  /// 检测频率相对目标半音的音分差（可为任意大小，供粘性锁显示大偏差）
+  double _semitonesFrom(double freq, int targetSemi) {
+    final f0 = _a4 * math.pow(2.0, targetSemi / 12.0);
+    return 1200.0 * (freq > 0 && f0 > 0 ? math.log(freq / f0) / math.ln2 : 0.0);
   }
 
   /// 锁弦：同一根新弦连续 2 帧才切换，防止边界抖动（spec §5）。
@@ -177,13 +199,18 @@ class TunerController extends ChangeNotifier {
   }
 
   /// 手动指定目标弦（点 LED）；再次点击同一弦取消选择。
+  /// 粘性锁：锁定期间自动匹配不覆盖/清除，偏差始终相对此弦
+  /// （很松的弦离目标几百音分也能显示满偏，不会跳回"任意判断"）。
   void selectString(int semitoneIndex) {
     if (_active?.semitoneIndex == semitoneIndex) {
       _active = null;
+      _manualLock = false;
     } else {
       _active = StringTarget(semitoneIndex, _a4);
       _pending = null;
       _pendingCount = 0;
+      _manualLock = true;
+      // 立即以当前显示音高重算相对偏差（若有信号）
     }
     notifyListeners();
   }
@@ -197,6 +224,7 @@ class TunerController extends ChangeNotifier {
     // 模式切换 = 新音域，音名滞回历史作废
     _noteSemi = null;
     _noteCandidateSemi = null;
+    _manualLock = false;
     notifyListeners();
   }
 
