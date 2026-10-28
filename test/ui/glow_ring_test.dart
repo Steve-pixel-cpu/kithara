@@ -141,16 +141,26 @@ void main() {
           reason: '音偏低必须提示拧紧');
     });
 
-    testWidgets('弦号提示浮层: 点击弦条显示 5弦, 2s 后消失', (tester) async {
+    testWidgets('选弦提示为内联胶囊（引导语行内）, 不遮挡环心', (tester) async {
       final controller = TunerController();
       await tester.pumpWidget(harness(controller, KitharaTheme.dark));
       await tester.pump();
       await tester.pump();
       await tester.tap(find.byKey(const Key('led_A2')));
       await tester.pump();
+      // 胶囊存在且有 key
+      expect(find.byKey(const Key('string_hint_chip')), findsOneWidget);
       expect(find.text('5弦'), findsOneWidget);
+      // 胶囊位置: 与引导语同一行(Row 内), 即不在环心 Stack 里
+      final chip = find.byKey(const Key('string_hint_chip'));
+      final guidance = find.textContaining('拨');
+      final chipTop = tester.getTopLeft(chip).dy;
+      final guidanceTop = tester.getTopLeft(guidance).dy;
+      expect((chipTop - guidanceTop).abs(), lessThan(40),
+          reason: '胶囊与引导语同行(上下40px内), 而非环中央');
+      // 2s 后消失
       await tester.pump(const Duration(milliseconds: 2100));
-      expect(find.text('5弦'), findsNothing);
+      expect(find.byKey(const Key('string_hint_chip')), findsNothing);
     });
 
     testWidgets('弦模式显示 6 个 LED 弦条; 半音阶模式隐藏', (tester) async {

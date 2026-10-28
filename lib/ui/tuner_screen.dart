@@ -354,28 +354,6 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                         size: 300,
                         breathPhase: _breathCtrl.value,
                       ),
-                      // 选弦提示浮层（2s 自动消失）
-                      if (_stringHint != null)
-                        Positioned(
-                          top: 8,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: t.accentSoft,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: t.accent),
-                            ),
-                            child: Text(
-                              _stringHint!,
-                              style: TextStyle(
-                                color: t.text,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ),
                       // 量程标注（弧两端 + 顶部）
                       Positioned(
                         left: 18,
@@ -452,18 +430,52 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
               ),
             ),
             const SizedBox(height: 10),
-            // 状态引导语（替代生硬的"未检测到信号"）
-            Text(
-              _guidance(s),
-              style: TextStyle(
-                color: s.inTune
-                    ? t.ok
-                    : (s.hasSignal && s.cents.abs() <= 30
-                        ? t.warn
-                        : t.text3),
-                fontSize: 15,
-                letterSpacing: 0.3,
-              ),
+            // 状态引导语（内联弦号胶囊, 参考药丸样式, 不遮挡环心）
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 弦号胶囊（2s 自动消失）
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 200),
+                  alignment: Alignment.centerLeft,
+                  child: _stringHint != null
+                      ? Container(
+                          key: const Key('string_hint_chip'),
+                          margin: const EdgeInsets.only(right: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: t.accentSoft,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: t.accent),
+                          ),
+                          child: Text(
+                            _stringHint!,
+                            style: TextStyle(
+                              color: t.text,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+                Flexible(
+                  child: Text(
+                    _guidance(s),
+                    style: TextStyle(
+                      color: s.inTune
+                          ? t.ok
+                          : (s.hasSignal && s.cents.abs() <= 30
+                              ? t.warn
+                              : t.text3),
+                      fontSize: 15,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ),
+              ],
             ),
             const Spacer(),
             // 弦条
