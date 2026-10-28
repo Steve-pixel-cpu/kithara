@@ -14,9 +14,9 @@ void main() {
     await tester.pumpWidget(makeHarness());
     await tester.pump();
     expect(find.text('—'), findsOneWidget); // 初始音名占位
-    expect(find.text('A4 440.0 Hz'), findsOneWidget);
-    expect(find.byKey(const Key('string_bar_E2')), findsOneWidget);
-    expect(find.byKey(const Key('string_bar_E4')), findsOneWidget);
+    expect(find.text('A4 440.0'), findsOneWidget);
+    expect(find.byKey(const Key('led_E2')), findsOneWidget);
+    expect(find.byKey(const Key('led_E4')), findsOneWidget);
     expect(find.byType(CustomPaint), findsWidgets); // 仪表
     expect(find.text('标准'), findsOneWidget); // 当前模式名
   });
@@ -39,7 +39,7 @@ void main() {
     await tester.tap(find.text('Drop D').last);
     await tester.pumpAndSettle();
     expect(find.text('Drop D'), findsOneWidget);
-    expect(find.byKey(const Key('string_bar_D2')), findsOneWidget);
+    expect(find.byKey(const Key('led_D2')), findsOneWidget);
   });
 
   testWidgets('inTune: ±5¢ 内显示绿色对勾指示', (tester) async {
@@ -53,7 +53,7 @@ void main() {
   testWidgets('A4 弹窗: 点 A4 文本 → 对话框含滑条与确定', (tester) async {
     await tester.pumpWidget(makeHarness());
     await tester.pump();
-    await tester.tap(find.text('A4 440.0 Hz'));
+    await tester.tap(find.text('A4 440.0'));
     await tester.pumpAndSettle();
     expect(find.text('参考音 A4'), findsOneWidget);
     expect(find.byType(Slider), findsOneWidget);

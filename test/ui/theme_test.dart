@@ -20,8 +20,8 @@ void main() {
   group('KitharaTheme 令牌 (aulos 设计语言)', () {
     test('深色: 三层背景梯子 + 中性 accent + 状态色', () {
       final t = KitharaTheme.dark;
-      expect(t.bg, const Color(0xFF18181C));
-      expect(t.bgSide, const Color(0xFF151519));
+      expect(t.bg, const Color(0xFF0A0A0D)); // OLED 纯黑
+      expect(t.bgSide, const Color(0xFF0E0E11));
       expect(t.surface, const Color(0xFF1E1E23));
       expect(t.surface2, const Color(0xFF24242A));
       expect(t.border, const Color(0xFF2B2B31));
@@ -72,14 +72,14 @@ void main() {
       );
     }
 
-    testWidgets('深色模式: Scaffold 底色 = #18181C, 音名文字 = #ECECF1',
+    testWidgets('深色模式: Scaffold 底色 = #0A0A0D, 音名文字 = #ECECF1',
         (tester) async {
       final controller = TunerController();
       await tester.pumpWidget(harness(Brightness.dark, controller: controller));
       await tester.pump();
       final scaffold = tester.widget<Scaffold>(find.byType(Scaffold).first);
-      expect(scaffold.backgroundColor, const Color(0xFF18181C));
-      controller.onPitch(110.0, 0.95);
+      expect(scaffold.backgroundColor, const Color(0xFF0A0A0D)); // OLED 纯黑
+      controller.onPitch(110.0 * 1.02, 0.95); // 非 inTune, 音名白
       await tester.pump();
       final noteStyle = tester.widget<Text>(find.text('A2').first).style;
       expect(noteStyle!.color, const Color(0xFFECECF1));
@@ -92,7 +92,7 @@ void main() {
       await tester.pump();
       final scaffold = tester.widget<Scaffold>(find.byType(Scaffold).first);
       expect(scaffold.backgroundColor, const Color(0xFFFCFCFD));
-      controller.onPitch(110.0, 0.95);
+      controller.onPitch(110.0 * 1.02, 0.95); // 非 inTune
       await tester.pump();
       final noteStyle = tester.widget<Text>(find.text('A2').first).style;
       expect(noteStyle!.color, const Color(0xFF1D1D22));

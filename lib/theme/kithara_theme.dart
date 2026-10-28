@@ -49,8 +49,8 @@ class KitharaTheme {
   /// 深色：aulos :root 默认令牌
   static const dark = KitharaTheme(
     brightness: Brightness.dark,
-    bg: Color(0xFF18181C),
-    bgSide: Color(0xFF151519),
+    bg: Color(0xFF0A0A0D), // OLED 纯黑（辉光对比最强）
+    bgSide: Color(0xFF0E0E11),
     surface: Color(0xFF1E1E23),
     surface2: Color(0xFF24242A),
     surface3: Color(0xFF2E2E35),

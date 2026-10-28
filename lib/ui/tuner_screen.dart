@@ -1,11 +1,12 @@
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 
 import '../audio/mic_stream.dart';
 import '../theme/kithara_theme.dart';
 import '../tuner/tuner_controller.dart';
 import '../tuner/tuning_modes.dart';
+import 'glow_ring.dart';
 import 'platform_services.dart';
 
 /// 调音器主界面：仪表指针 + 音名大字 + 弦条 + 模式/参考音控件。
@@ -35,10 +36,21 @@ class TunerScreen extends StatefulWidget {
   State<TunerScreen> createState() => _TunerScreenState();
 }
 
-class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
+class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   bool _micStarted = false;
   bool _permissionDenied = false;
   bool _wasInTune = false;
+
+  // 弹簧动画：把 15Hz 的检测跳变插值成 60fps 连续运动
+  late final AnimationController _springCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 450),
+  );
+  SpringSimulation _needleSim = SpringSimulation(
+    const SpringDescription(mass: 1, stiffness: 120, damping: 14),
+    0, 0, 0,
+  );
+  double _displayNeedle = 0.0;
 
   MicPermission get _perm =>
       widget.micPermission ?? MicPermissionImpl(widget.mic);
@@ -97,6 +109,7 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _springCtrl.dispose();
     WidgetsBinding.instance.removeObserver(this);
     widget.controller.removeListener(_onState);
     _stopMic();
@@ -104,12 +117,21 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
   }
 
   void _onState() {
-    // inTune 边沿 → 触觉脉冲一次
     final s = widget.controller.state;
+    // inTune 边沿 → 触觉脉冲 + 音名弹跳 + 弹簧目标切到 0（环心对准）
     if (s.inTune && !_wasInTune) {
       widget.haptics?.inTunePulse();
     }
     _wasInTune = s.inTune;
+    // 新目标 = 靠近对准区时把视觉目标吸到 0，减少抖动；否则用真实 needle
+    final target = s.inTune ? 0.0 : s.needle;
+    _needleSim = SpringSimulation(
+      const SpringDescription(mass: 1, stiffness: 120, damping: 14),
+      _displayNeedle, target, 0,
+    );
+    _springCtrl
+      ..stop()
+      ..animateWith(_needleSim);
     setState(() {});
   }
 
@@ -168,21 +190,18 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
                     ),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: t.surface2,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: t.border),
-                      ),
+                          horizontal: 12, vertical: 8),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Flexible(
-                            child: Text(s.mode.label,
-                                style: TextStyle(color: t.text),
-                                overflow: TextOverflow.ellipsis),
-                          ),
-                          Icon(Icons.arrow_drop_down, color: t.text2),
+                          Text(s.mode.label,
+                              style: TextStyle(
+                                color: t.text2,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              )),
+                          Icon(Icons.arrow_drop_down,
+                              color: t.text3, size: 22),
                         ],
                       ),
                     ),
@@ -203,14 +222,15 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
                     borderRadius: BorderRadius.circular(12),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: t.surface2,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: t.border),
+                          horizontal: 12, vertical: 8),
+                      child: Text(
+                        'A4 ${s.a4.toStringAsFixed(1)}',
+                        style: TextStyle(
+                          color: t.text3,
+                          fontSize: 16,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
                       ),
-                      child: Text('A4 ${s.a4.toStringAsFixed(1)} Hz',
-                          style: TextStyle(color: t.text2)),
                     ),
                   ),
                   ),
@@ -218,52 +238,71 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
               ),
             ),
             const Spacer(flex: 2),
-            // 音名大字 + inTune 指示
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  s.noteLabel,
-                  style: TextStyle(
-                    color: s.hasSignal ? t.text : t.text3,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 72,
-                    height: 1.0,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                if (s.inTune)
-                  KeyedSubtree(
-                    key: const Key('in_tune_indicator'),
-                    child: Icon(Icons.check_circle, color: t.ok, size: 40),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              s.hasSignal
-                  ? '${s.cents >= 0 ? '+' : ''}${s.cents.toStringAsFixed(0)} ¢'
-                  : '未检测到信号',
-              style: TextStyle(
-                // 色彩只表达状态（aulos 原则）: inTune=ok, 检测中=warn, 无信号=text3
-                color: s.inTune
-                    ? t.ok
-                    : (s.hasSignal ? t.warn : t.text3),
-                fontSize: 22,
-                fontFeatures: const [FontFeature.tabularFigures()],
+            // 发光环仪表：环心音名大字 + cents；弹簧插值 needle
+            Center(
+              child: AnimatedBuilder(
+                animation: _springCtrl,
+                builder: (context, _) {
+                  _displayNeedle = _needleSim.x(
+                      _springCtrl.value * 450 / 1000);
+                  final display = s.inTune
+                      ? _displayNeedle
+                      : _displayNeedle;
+                  return Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      GlowRing(
+                        needle: display,
+                        locked: s.inTune,
+                        hasSignal: s.hasSignal,
+                        theme: t,
+                        size: 300,
+                      ),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // 环心音名：无信号显示 —，锁定 ok 绿
+                          Text(
+                            s.hasSignal ? s.noteLabel : '—',
+                            key: const Key('in_tune_indicator'),
+                            style: TextStyle(
+                              color: s.inTune
+                                  ? t.ok
+                                  : (s.hasSignal ? t.text : t.text3),
+                              fontWeight: FontWeight.w700,
+                              fontSize: 84,
+                              height: 1.0,
+                              letterSpacing: -2,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            s.hasSignal
+                                ? '${s.cents >= 0 ? '+' : ''}${s.cents.toStringAsFixed(0)}¢'
+                                : '',
+                            style: TextStyle(
+                              color: s.inTune ? t.ok : t.text2,
+                              fontSize: 20,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures()
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
             const Spacer(),
-            // 仪表
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: SizedBox(
-                height: 140,
-                child: CustomPaint(
-                  painter: _NeedleGauge(
-                      needle: s.needle, hasSignal: s.hasSignal, t: t),
-                  size: Size.infinite,
-                ),
+            // 状态引导语（替代生硬的"未检测到信号"）
+            Text(
+              _guidance(s),
+              style: TextStyle(
+                color: s.inTune ? t.ok : t.text3,
+                fontSize: 15,
+                letterSpacing: 0.3,
               ),
             ),
             const Spacer(),
@@ -278,7 +317,7 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
                     for (final st in s.mode.strings)
                       Expanded(
                         child: _StringBar(
-                          key: Key('string_bar_${st.name}'),
+                          key: Key('led_${st.name}'),
                           target: st,
                           t: t,
                           active: s.activeString?.semitoneIndex ==
@@ -295,6 +334,27 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
         ),
       ),
     );
+  }
+
+  /// 状态引导语：告诉用户下一步做什么，替代"未检测到信号"。
+  String _guidance(TunerState s) {
+    if (s.mode.semitones.isEmpty) {
+      // 半音阶：无目标弦
+      if (!s.hasSignal) return '拨响任意弦开始调音';
+      if (s.inTune) return '✓ ${s.noteLabel} 已调准';
+      return s.cents > 15
+          ? '偏低，向 ${s.noteLabel} 拧紧'
+          : (s.cents < -15 ? '偏高，向 ${s.noteLabel} 拧松' : '微调…');
+    }
+    final target = s.activeString;
+    if (!s.hasSignal) {
+      return target == null ? '拨响任意弦开始调音' : '拨响 ${target.name} 弦';
+    }
+    if (s.inTune && target != null) return '✓ ${target.name} 已调准';
+    if (target == null) return '音高偏离各弦，继续调整';
+    return s.cents > 8
+        ? '向 ${target.name} 拧紧…'
+        : (s.cents < -8 ? '向 ${target.name} 拧松…' : '微调…');
   }
 
   void _showA4Dialog(BuildContext context, double current) {
@@ -368,103 +428,35 @@ class _StringBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // aulos 手法: 默认 surface-2 融入背景, active 用 accent 描边+微亮底,
-    // inTune 才给状态色 (ok-soft 底 + ok 描边)
+    // LED 胶囊：默认暗块，active 亮白描边，inTune 绿色常亮
     return Column(
       children: [
         Container(
-          width: 40,
-          height: 64,
+          height: 10,
+          margin: const EdgeInsets.symmetric(horizontal: 6),
           decoration: BoxDecoration(
             color: inTune
-                ? t.okSoft
-                : (active ? t.accentSoft : t.surface2),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: inTune
-                  ? t.ok
-                  : (active ? t.accent : t.border),
-              width: inTune || active ? 1.5 : 1,
-            ),
+                ? t.ok
+                : (active ? t.text : t.surface3),
+            borderRadius: BorderRadius.circular(5),
+            boxShadow: inTune
+                ? [BoxShadow(color: t.ok.withValues(alpha: 0.45), blurRadius: 10)]
+                : (active
+                    ? [BoxShadow(color: t.text.withValues(alpha: 0.25), blurRadius: 6)]
+                    : null),
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         Text(
           target.name,
           style: TextStyle(
             color: inTune ? t.ok : (active ? t.text : t.text3),
             fontSize: 12,
+            fontFeatures: const [FontFeature.tabularFigures()],
             fontWeight: active || inTune ? FontWeight.w600 : FontWeight.w400,
           ),
         ),
       ],
     );
   }
-}
-
-/// 半圆仪表：刻度弧 + 指针。needle ∈ [-1,1]，0 居中，±50¢ 满偏。
-/// 颜色即状态: 指针常态 accent 灰, 接近居中(|n|<0.1)变 ok 绿, 无信号 text3。
-class _NeedleGauge extends CustomPainter {
-  _NeedleGauge({required this.needle, required this.hasSignal, required this.t});
-
-  final double needle;
-  final bool hasSignal;
-  final KitharaTheme t;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height * 0.92);
-    final radius = math.min(size.width / 2 - 8, size.height * 0.85);
-    final sweepMax = math.pi * 0.75; // 可视扇形 ±135°
-
-    // 刻度弧
-    final trackPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 6
-      ..strokeCap = StrokeCap.round
-      ..color = t.surface3;
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      math.pi + (math.pi - sweepMax) / 2,
-      sweepMax,
-      false,
-      trackPaint,
-    );
-    // 中央刻度（对准区）
-    final tickPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
-      ..color = t.borderStrong;
-    final midAngle = math.pi + (math.pi - sweepMax) / 2 + sweepMax / 2;
-    canvas.drawLine(
-      center,
-      center +
-          Offset(math.cos(midAngle), math.sin(midAngle)) *
-              (radius - 14),
-      tickPaint,
-    );
-
-    // 指针
-    final n = needle.clamp(-1.0, 1.0);
-    final angle = math.pi +
-        (math.pi - sweepMax) / 2 +
-        sweepMax * (0.5 + n * 0.5);
-    final needlePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round
-      ..color = hasSignal
-          ? (n.abs() < 0.1 ? t.ok : t.accent)
-          : t.text3;
-    canvas.drawLine(
-      center,
-      center + Offset(math.cos(angle), math.sin(angle)) * (radius - 6),
-      needlePaint,
-    );
-    canvas.drawCircle(center, 6, needlePaint);
-  }
-
-  @override
-  bool shouldRepaint(_NeedleGauge oldDelegate) =>
-      oldDelegate.needle != needle || oldDelegate.hasSignal != hasSignal;
 }
