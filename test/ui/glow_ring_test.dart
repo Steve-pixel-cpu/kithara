@@ -63,8 +63,8 @@ void main() {
       expect(find.text('A2'), findsWidgets); // 环心 + 弦条
       controller.onPitch(null, 0.9);
       await tester.pump();
-      expect(find.text('—'), findsOneWidget); // 环心占位
-      // 环心音名消失（弦条 LED 标签常驻不算幽灵音名）
+      // 环心无信号时整体不渲染（无 — 占位，无幽灵音名）；弦条 LED 标签常驻
+      expect(find.text('—'), findsNothing);
       expect(find.text('A2'), findsOneWidget);
       expect(find.textContaining('拨'), findsOneWidget); // 引导语
     });
@@ -80,13 +80,15 @@ void main() {
       expect(ring.locked, isFalse);
     });
 
-    testWidgets('锁定: ring.locked=true, 引导语为已调准', (tester) async {
+    testWidgets('锁定: ring.locked=true, needle 钉死 0, 引导语为已调准', (tester) async {
       final controller = TunerController();
       await tester.pumpWidget(harness(controller, KitharaTheme.dark));
       controller.onPitch(110.0 * 1.001, 0.95); // A2 +1.7¢
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
       final ring = tester.widget<GlowRing>(find.byType(GlowRing));
       expect(ring.locked, isTrue);
+      expect(ring.needle, 0.0); // 视觉指针钉死正中
       expect(find.textContaining('已调准'), findsOneWidget);
     });
 

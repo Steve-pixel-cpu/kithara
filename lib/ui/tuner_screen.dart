@@ -275,9 +275,8 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                 builder: (context, _) {
                   _displayNeedle = _needleSim.x(
                       _springCtrl.value * 450 / 1000);
-                  final display = s.inTune
-                      ? _displayNeedle
-                      : _displayNeedle;
+                  // 锁定时指针钉死正中：±5¢ 内的真实抖动不传给视觉
+                  final display = s.inTune ? 0.0 : _displayNeedle;
                   return Stack(
                     alignment: Alignment.center,
                     children: [
@@ -291,42 +290,41 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                         theme: t,
                         size: 300,
                       ),
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // 环心音名：无信号显示 —，锁定 ok 绿
-                          Text(
-                            s.hasSignal ? s.noteLabel : '—',
-                            key: const Key('in_tune_indicator'),
-                            style: TextStyle(
-                              color: s.inTune
-                                  ? t.ok
-                                  : (s.hasSignal ? t.text : t.text3),
-                              fontWeight: FontWeight.w700,
-                              fontSize: 64,
-                              height: 1.0,
-                              letterSpacing: -2,
+                      if (s.hasSignal)
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // 环心音名（无信号整体不渲染，环心留给指针轴点）
+                            Text(
+                              s.noteLabel,
+                              key: const Key('in_tune_indicator'),
+                              style: TextStyle(
+                                color: s.inTune
+                                    ? t.ok
+                                    : (s.cents.abs() <= 30 ? t.warn : t.text),
+                                fontWeight: FontWeight.w700,
+                                fontSize: 64,
+                                height: 1.0,
+                                letterSpacing: -2,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            s.hasSignal
-                                ? '${s.cents >= 0 ? '+' : ''}${s.cents.toStringAsFixed(0)}¢'
-                                : '',
-                            style: TextStyle(
-                              color: s.inTune
-                                  ? t.ok
-                                  : (s.hasSignal && s.cents.abs() <= 30
-                                      ? t.warn
-                                      : t.text2),
-                              fontSize: 20,
-                              fontFeatures: const [
-                                FontFeature.tabularFigures()
-                              ],
+                            const SizedBox(height: 4),
+                            Text(
+                              '${s.cents >= 0 ? '+' : ''}${s.cents.toStringAsFixed(0)}¢',
+                              style: TextStyle(
+                                color: s.inTune
+                                    ? t.ok
+                                    : (s.cents.abs() <= 30
+                                        ? t.warn
+                                        : t.text2),
+                                fontSize: 20,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures()
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
+                          ],
+                        ),
                     ],
                   );
                 },

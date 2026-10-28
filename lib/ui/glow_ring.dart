@@ -113,8 +113,9 @@ class _GlowRingPainter extends CustomPainter {
       ..color = stateColor;
     canvas.drawArc(rect, headAngle - 0.012, 0.024, false, core);
 
-    // 环心指针：从中心 42% 半径指向光点（留出环心文字空间）
-    final innerR = radius * 0.42;
+    // 环心指针：细杆从中心外侧 55% 半径起笔到光点，不画轴心圆点
+    // （中心留给音名文字，避免圆点与文字打架）
+    final innerR = radius * 0.55;
     final tail =
         center + Offset(math.cos(headAngle), math.sin(headAngle)) * innerR;
     final head =
@@ -125,7 +126,6 @@ class _GlowRingPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..color = stateColor;
     canvas.drawLine(tail, head, needlePaint);
-    canvas.drawCircle(center, 5, needlePaint);
   }
 
   @override

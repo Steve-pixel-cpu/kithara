@@ -13,7 +13,7 @@ void main() {
   testWidgets('渲染: 音名大字 + 仪表 + 6 弦条 + 模式按钮 + A4 显示', (tester) async {
     await tester.pumpWidget(makeHarness());
     await tester.pump();
-    expect(find.text('—'), findsOneWidget); // 初始音名占位
+    expect(find.text('—'), findsNothing); // 无信号不渲染音名占位
     expect(find.text('A4 440.0'), findsOneWidget);
     expect(find.byKey(const Key('led_E2')), findsOneWidget);
     expect(find.byKey(const Key('led_E4')), findsOneWidget);
