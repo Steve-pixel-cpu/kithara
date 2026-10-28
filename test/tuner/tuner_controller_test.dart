@@ -68,6 +68,27 @@ void main() {
     expect(controller.state.noteLabel, 'E3');
   });
 
+  test('松弦毛刺抑制: 检测帧间乱跳时中值滤波稳住读数（毛刺帧被丢弃）', () {
+    final controller = TunerController();
+    controller.selectString(-5); // 锁 E4
+    // 模拟松弦的真实检测序列: 真值 ~250Hz, 混入毛刺帧 400/180
+    final frames = [250.0, 400.0, 250.0, 250.0, 180.0, 250.0, 251.0, 249.0];
+    final centsSeen = <double>[];
+    for (final f in frames) {
+      controller.onPitch(f, 0.95);
+      centsSeen.add(controller.state.cents);
+    }
+    // 中值滤波后: 所有 cents 应稳定在 250Hz 的真实偏差附近（±20¢ 内）,
+    // 而不是出现 400Hz(-316c 相对偏差更负) / 180Hz 的极端跳变
+    final base = centsSeen.last;
+    for (final c in centsSeen.skip(2)) {
+      expect((c - base).abs(), lessThan(25),
+          reason: 'cents 序列 ${centsSeen.map((e) => e.toStringAsFixed(0)).join(",")} 应平滑');
+    }
+    // needle 恒满偏（大偏差）
+    expect(controller.state.needle, -1.0);
+  });
+
   test('手动粘性锁: 弹任意音不丢锁定, 偏差相对目标弦（很松的弦也能看到 -50 满偏）', () {
     final controller = TunerController();
     controller.selectString(-5); // E4 = 1弦
@@ -157,11 +178,18 @@ void main() {
 
   test('needle: -1..1 归一化, ±50¢ 映射满偏', () {
     controller.setMode(TuningModes.byId('chromatic'));
-    controller.onPitch(440.0 * math.pow(2, 50 / 1200), 0.95); // +50¢
+    // 滤波窗口 3 帧: 连发同值使窗口收敛后再断言
+    for (var i = 0; i < 5; i++) {
+      controller.onPitch(440.0 * math.pow(2, 50 / 1200), 0.95); // +50¢
+    }
     expect(controller.state.needle, closeTo(1.0, 0.01));
-    controller.onPitch(440.0, 0.95);
+    for (var i = 0; i < 5; i++) {
+      controller.onPitch(440.0, 0.95);
+    }
     expect(controller.state.needle, closeTo(0.0, 0.001));
-    controller.onPitch(440.0 * math.pow(2, -50 / 1200), 0.95); // -50¢
+    for (var i = 0; i < 5; i++) {
+      controller.onPitch(440.0 * math.pow(2, -50 / 1200), 0.95); // -50¢
+    }
     expect(controller.state.needle, closeTo(-1.0, 0.01));
   });
 }

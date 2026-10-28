@@ -54,6 +54,10 @@ class TunerController extends ChangeNotifier {
   int? _noteCandidateSemi; // 挂起中的新音名（需第 2 帧确认）
   bool _manualLock = false; // 手动选弦粘性锁（自动匹配不覆盖）
 
+  // 3 帧中值滤波: 松弦时检测帧间乱跳（真实物理现象——低张力弦谐波失谐）,
+  // 中位数天然免疫单帧毛刺, 比均值平滑不拖慢正常跟弦
+  final List<double> _freqWindow = [];
+
   /// 锁定保持：调准后信号丢失仍保持锁定视觉 2s（拨弦衰减是常态，
   /// 绿色不该随音量消失而闪灭）。实现为时间戳比较——无 Timer、无泄漏，
   /// 每次读 state 即时判定。
@@ -102,6 +106,12 @@ class TunerController extends ChangeNotifier {
     }
     final hadSignal = _hasSignal;
     _hasSignal = confidence >= (hadSignal ? _confHold : _confOn);
+    // 中值滤波: 维护最近 3 帧频率, 取中位（仅用于 cents/needle 显示平滑；
+    // 音名滞回与弦锁定用原始帧——随机毛刺不会连续 2 帧同值, 滞回本就免疫）
+    _freqWindow.add(freq);
+    if (_freqWindow.length > 3) _freqWindow.removeAt(0);
+    final sorted = [..._freqWindow]..sort();
+    final smoothed = sorted[sorted.length ~/ 2];
     if (!_hasSignal) {
       // 未达门限：走无信号路径（保持窗口仍生效）
       final wasTuned = _active != null && _cents.abs() <= 5.0;
@@ -113,7 +123,6 @@ class TunerController extends ChangeNotifier {
     }
     // 新信号到来 → 结束保持窗口，回到实时判定
     _lockHoldUntil = null;
-    final mapperCents = _mapper.centsOffset(freq);
     _noteLabel = _mapper.noteName(_mapper.nearestSemitoneIndex(freq));
 
     // 音名滞回：与当前音名偏离超过半音的突变，需连续 2 帧一致才换名
@@ -134,9 +143,9 @@ class TunerController extends ChangeNotifier {
     _noteLabel = _mapper.noteName(_noteSemi ?? newSemi);
 
     if (_manualLock && _active != null) {
-      // 粘性锁：跳过自动匹配，偏差 = 检测音高 相对 锁定弦
+      // 粘性锁：跳过自动匹配，偏差 = 滤波后音高 相对 锁定弦
       final lockedSemi = _active!.semitoneIndex;
-      _cents = _semitonesFrom(freq, lockedSemi);
+      _cents = _semitonesFrom(smoothed, lockedSemi);
       _needle = (_cents / 50.0).clamp(-1.0, 1.0);
       // 显示音名 = 目标弦音名（初学者视角: 正在调这根弦，不随检测跳）
       _noteLabel = _mapper.noteName(lockedSemi);
@@ -160,7 +169,9 @@ class TunerController extends ChangeNotifier {
       _active = null;
     }
 
-    _cents = match?.cents ?? mapperCents;
+    // cents 显示用滤波值（毛刺免疫）; 弦匹配/音名已由原始帧判定
+    final matchSmoothed = _mode.matchString(smoothed);
+    _cents = matchSmoothed?.cents ?? _mapper.centsOffset(smoothed);
     _needle = (_cents / 50.0).clamp(-1.0, 1.0);
     notifyListeners();
   }
