@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kithara/tuner/tuner_controller.dart';
-import 'package:kithara/tuner/tuning_modes.dart';
 import 'package:kithara/ui/tuner_screen.dart';
 
 void main() {
