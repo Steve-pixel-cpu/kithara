@@ -2,24 +2,81 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../audio/mic_stream.dart';
 import '../tuner/tuner_controller.dart';
 import '../tuner/tuning_modes.dart';
+import 'platform_services.dart';
 
 /// 调音器主界面：仪表指针 + 音名大字 + 弦条 + 模式/参考音控件。
+/// 生命周期：进入前台自动 start 麦克风；退后台 stop；权限拒绝显示引导页。
 class TunerScreen extends StatefulWidget {
-  const TunerScreen({super.key, required this.controller});
+  const TunerScreen({
+    super.key,
+    required this.controller,
+    this.micPermission,
+    this.haptics,
+  });
 
   final TunerController controller;
+  final MicPermission? micPermission;
+  final Haptics? haptics;
 
   @override
   State<TunerScreen> createState() => _TunerScreenState();
 }
 
-class _TunerScreenState extends State<TunerScreen> {
+class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
+  MicStream? _mic;
+  bool _micStarted = false;
+  bool _permissionDenied = false;
+  bool _wasInTune = false;
+
+  MicPermission get _perm => widget.micPermission ?? MicPermissionImpl(_ensureMic());
+
+  MicStream _ensureMic() => _mic ??= MicStream();
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     widget.controller.addListener(_onState);
+    _startup();
+  }
+
+  Future<void> _startup() async {
+    final granted = await (widget.micPermission ?? _perm).ensure();
+    if (!mounted) return;
+    if (!granted) {
+      setState(() => _permissionDenied = true);
+      return;
+    }
+    await _startMic();
+  }
+
+  Future<void> _startMic() async {
+    final mic = _ensureMic();
+    final ok = await mic.start();
+    if (!mounted) return;
+    setState(() {
+      _permissionDenied = !ok;
+      _micStarted = ok;
+    });
+  }
+
+  Future<void> _stopMic() async {
+    if (!_micStarted) return;
+    await _mic?.stop();
+    _micStarted = false;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _startup();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      _stopMic();
+    }
   }
 
   @override
@@ -33,17 +90,54 @@ class _TunerScreenState extends State<TunerScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     widget.controller.removeListener(_onState);
+    _stopMic();
+    _mic?.dispose();
     super.dispose();
   }
 
-  void _onState() => setState(() {});
+  void _onState() {
+    // inTune 边沿 → 触觉脉冲一次
+    final s = widget.controller.state;
+    if (s.inTune && !_wasInTune) {
+      widget.haptics?.inTunePulse();
+    }
+    _wasInTune = s.inTune;
+    setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
     final s = widget.controller.state;
     final theme = Theme.of(context);
     final isChromatic = s.mode.semitones.isEmpty;
+
+    if (_permissionDenied) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF15171C),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
+              Icon(Icons.mic_off, color: Colors.white24, size: 64),
+              SizedBox(height: 16),
+              Text('需要麦克风权限',
+                  style: TextStyle(color: Colors.white70, fontSize: 18)),
+              SizedBox(height: 24),
+            ],
+          ),
+        ),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () {
+            setState(() => _permissionDenied = false);
+            _startup();
+          },
+          label: const Text('重试'),
+          icon: const Icon(Icons.refresh),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFF15171C),
