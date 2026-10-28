@@ -139,29 +139,42 @@ void main() {
         }
         return null;
       });
-      // 拦截 SharedPreferences
+      // 拦截 SharedPreferences（默认 themeMode=system；测试平台亮度=light）
       SharedPreferences.setMockInitialValues({});
-      await tester.pumpWidget(const KitharaApp());
+      await tester.pumpWidget(const MediaQuery(
+        data: MediaQueryData(platformBrightness: Brightness.light),
+        child: KitharaApp(),
+      ));
       await tester.pump();
       await tester.pump();
+      // system + 平台 light → 浅色
       expect(
         tester.widget<Scaffold>(find.byType(Scaffold).first).backgroundColor,
-        const Color(0xFF0A0A0D), // 深色 OLED
+        const Color(0xFFFCFCFD),
       );
+      // 点击: system → dark
       await tester.tap(find.byKey(const Key('theme_toggle')));
       await tester.pump();
       await tester.pump();
       expect(
         tester.widget<Scaffold>(find.byType(Scaffold).first).backgroundColor,
-        const Color(0xFFFCFCFD), // 浅色
+        const Color(0xFF0A0A0D), // OLED 深
       );
-      // 再点回深色
+      // 点击: dark → light
       await tester.tap(find.byKey(const Key('theme_toggle')));
       await tester.pump();
       await tester.pump();
       expect(
         tester.widget<Scaffold>(find.byType(Scaffold).first).backgroundColor,
-        const Color(0xFF0A0A0D),
+        const Color(0xFFFCFCFD),
+      );
+      // 点击: light → system（跟随平台 light → 仍是浅色）
+      await tester.tap(find.byKey(const Key('theme_toggle')));
+      await tester.pump();
+      await tester.pump();
+      expect(
+        tester.widget<Scaffold>(find.byType(Scaffold).first).backgroundColor,
+        const Color(0xFFFCFCFD), // system 跟随平台 light
       );
     });
 
@@ -196,6 +209,34 @@ void main() {
       // 呼吸动画推进一帧不异常
       await tester.pump(const Duration(milliseconds: 500));
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('themeMode=dark 时 ignore platform, themeMode=system 跟随', (tester) async {
+      final controller = TunerController();
+      // system + platform light → 实际浅色 Scaffold
+      late Widget app;
+      app = MediaQuery(
+        data: MediaQueryData(platformBrightness: Brightness.light),
+        child: MaterialApp(
+          theme: KitharaTheme.dark.toThemeData(),
+          home: TunerScreen(
+            controller: controller,
+            mic: MicStream(),
+            micPermission: _Granted(),
+            haptics: _NoHaptics(),
+            theme: KitharaTheme.dark,
+            themeMode: 'system',
+          ),
+        ),
+      );
+      await tester.pumpWidget(app);
+      await tester.pump();
+      await tester.pump();
+      // system 跟随 → Scaffold 用浅色
+      expect(
+        tester.widget<Scaffold>(find.byType(Scaffold).first).backgroundColor,
+        const Color(0xFFFCFCFD),
+      );
     });
 
     testWidgets('onThemeToggle 回调被调用', (tester) async {

@@ -34,6 +34,24 @@ void main() {
     expect(controller.state.a4, 442.0);
   });
 
+  test('themeMode 持久化 roundtrip: system/light/dark', () async {
+    SharedPreferences.setMockInitialValues({'themeMode': 'light'});
+    final loaded = await TunerSettings.load();
+    expect(loaded.themeMode, 'light');
+  });
+
+  test('themeMode 非法值回退 system', () async {
+    SharedPreferences.setMockInitialValues({'themeMode': 'bogus'});
+    final loaded = await TunerSettings.load();
+    expect(loaded.themeMode, 'system');
+  });
+
+  test('无 themeMode 存储 → 默认 system', () async {
+    SharedPreferences.setMockInitialValues({});
+    final loaded = await TunerSettings.load();
+    expect(loaded.themeMode, 'system');
+  });
+
   test('非法存储值回退默认', () async {
     SharedPreferences.setMockInitialValues({'modeId': 'bogus', 'a4': 99999.0});
     final loaded = await TunerSettings.load();

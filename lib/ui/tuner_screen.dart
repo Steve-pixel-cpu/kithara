@@ -19,6 +19,7 @@ class TunerScreen extends StatefulWidget {
     this.micPermission,
     this.haptics,
     this.theme = KitharaTheme.dark,
+    this.themeMode = 'dark',
     this.onThemeToggle,
     this.onSelectString,
   });
@@ -33,6 +34,9 @@ class TunerScreen extends StatefulWidget {
 
   /// 设计令牌（aulos 设计语言，深浅两套）。
   final KitharaTheme theme;
+
+  /// 主题模式：'system' 跟随系统亮度（覆盖 theme 字段），'light'/'dark' 固定。
+  final String themeMode;
 
   /// 主题切换回调（主题所有权在装配层/外部）。
   final VoidCallback? onThemeToggle;
@@ -153,7 +157,17 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
   @override
   Widget build(BuildContext context) {
     final s = widget.controller.state;
-    final t = widget.theme;
+    // 'system' → 跟随平台亮度实时解析；'light'/'dark' 用传入 theme 的亮暗
+    final KitharaTheme t;
+    if (widget.themeMode == 'system') {
+      final platformBright =
+          MediaQuery.maybePlatformBrightnessOf(context) ?? Brightness.dark;
+      t = platformBright == Brightness.light
+          ? KitharaTheme.light
+          : KitharaTheme.dark;
+    } else {
+      t = widget.theme;
+    }
     final isChromatic = s.mode.semitones.isEmpty;
 
     if (_permissionDenied) {
@@ -247,12 +261,14 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                         child: Padding(
                           padding: const EdgeInsets.all(8),
                           child: Icon(
-                            t.brightness == Brightness.dark
-                                ? Icons.light_mode_outlined
-                                : Icons.dark_mode_outlined,
-                            color: t.text3,
-                            size: 20,
-                          ),
+                          switch (widget.themeMode) {
+                            'system' => Icons.brightness_auto_outlined,
+                            'light' => Icons.dark_mode_outlined, // 当前浅色,点击切深色
+                            _ => Icons.light_mode_outlined, // 当前深色,点击切浅色
+                          },
+                          color: t.text3,
+                          size: 20,
+                        ),
                         ),
                       ),
                       Flexible(

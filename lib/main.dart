@@ -20,14 +20,59 @@ class KitharaApp extends StatefulWidget {
 }
 
 class _KitharaAppState extends State<KitharaApp> {
-  KitharaTheme _theme = KitharaTheme.dark;
+  /// 'system' | 'light' | 'dark'（循环切换：dark → light → system → dark）
+  String _themeMode = 'system';
+  bool _settingsRestored = false;
+
+  @override
+  void initState() {
+    super.initState();
+    TunerSettings.load().then((s) {
+      // 用户若在恢复完成前已切换，恢复值不覆盖用户选择（竞态防护）
+      if (mounted && !_settingsRestored) {
+        setState(() => _themeMode = s.themeMode);
+      }
+    });
+  }
+
+  void _handleThemeModeChanged(String mode) {
+    _settingsRestored = true;
+    setState(() => _themeMode = mode);
+    // 同步 isDark 兼容字段 + 持久化 themeMode
+    final platDark = WidgetsBinding
+            .instance.platformDispatcher.platformBrightness ==
+        Brightness.dark;
+    final effDark = mode == 'system'
+        ? platDark
+        : mode == 'dark';
+    TunerSettings().save(
+      _homeKey.currentState?.bridge.lastSavedModeId ?? 'standard',
+      _homeKey.currentState?.bridge.lastSavedA4 ?? 440.0,
+      isDark: effDark,
+      themeMode: mode,
+    );
+  }
+
+  final _homeKey = GlobalKey<_TunerHomeState>();
 
   @override
   Widget build(BuildContext context) {
+    // system 模式：MaterialApp theme 也按平台亮度解析（Material 组件/弹窗跟随）
+    final platDark = MediaQuery.of(context).platformBrightness == Brightness.dark;
+    final theme = switch (_themeMode) {
+      'light' => KitharaTheme.light,
+      'dark' => KitharaTheme.dark,
+      _ => (platDark ? KitharaTheme.dark : KitharaTheme.light),
+    };
     return MaterialApp(
       title: 'Kithara',
-      theme: _theme.toThemeData(),
-      home: _TunerHome(onThemeChanged: (t) => setState(() => _theme = t)),
+      theme: theme.toThemeData(),
+      home: _TunerHome(
+        key: _homeKey,
+        theme: theme,
+        themeMode: _themeMode,
+        onThemeModeChanged: _handleThemeModeChanged,
+      ),
     );
   }
 }
@@ -35,9 +80,16 @@ class _KitharaAppState extends State<KitharaApp> {
 /// 装配根：设置加载 → controller → 管线（Ticker 驱动）→ 屏幕。
 /// 主题状态在这里持有（切换按钮 → setState → 全应用生效）。
 class _TunerHome extends StatefulWidget {
-  const _TunerHome({this.onThemeChanged});
+  const _TunerHome({
+    super.key,
+    this.theme,
+    this.themeMode,
+    this.onThemeModeChanged,
+  });
 
-  final ValueChanged<KitharaTheme>? onThemeChanged;
+  final KitharaTheme? theme;
+  final String? themeMode;
+  final ValueChanged<String>? onThemeModeChanged;
 
   @override
   State<_TunerHome> createState() => _TunerHomeState();
@@ -48,7 +100,9 @@ class _TunerHomeState extends State<_TunerHome> {
   final MicStream _mic = MicStream();
   late final TunerPipelineBridge _bridge;
   Ticker? _ticker;
-  KitharaTheme _theme = KitharaTheme.dark;
+
+  /// 供 App 层读取最近保存的模式/A4（主题持久化合并写入用）
+  TunerPipelineBridge get bridge => _bridge;
 
   @override
   void initState() {
@@ -79,18 +133,24 @@ class _TunerHomeState extends State<_TunerHome> {
 
   @override
   Widget build(BuildContext context) {
+    // themeMode='system' → TunerScreen 内部按平台亮度实时解析有效主题
+    // theme 字段作 system 模式下的缺省（被 system 解析覆盖）
     return TunerScreen(
       controller: _controller,
       mic: _mic,
       micPermission: MicPermissionImpl(_mic),
       haptics: HapticsImpl(),
-      theme: _theme,
+      theme: widget.theme ?? KitharaTheme.dark,
+      themeMode: widget.themeMode ?? 'dark',
       onThemeToggle: () {
-        final next = _theme.brightness == Brightness.dark
-            ? KitharaTheme.light
-            : KitharaTheme.dark;
-        setState(() => _theme = next);
-        widget.onThemeChanged?.call(next);
+        // 三态循环: dark → light → system → dark
+        final cur = widget.themeMode ?? 'dark';
+        final next = switch (cur) {
+          'dark' => 'light',
+          'light' => 'system',
+          _ => 'dark',
+        };
+        widget.onThemeModeChanged?.call(next);
       },
     );
   }
@@ -113,6 +173,9 @@ class TunerPipelineBridge {
   PitchDetector _detector = PitchDetector();
   TuningMode? _lastMode;
   double _lastA4 = 0;
+
+  String get lastSavedModeId => _lastMode?.id ?? 'standard';
+  double get lastSavedA4 => _lastA4 == 0 ? 440.0 : _lastA4;
 
   void tick() {
     // 设置变更检测（含首次），变更即持久化；
