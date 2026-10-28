@@ -102,6 +102,30 @@ void main() {
     expect(det.detect(weak), isNotNull);
   });
 
+  test('1 弦高把位: 2次谐波强 + NSDF 微扰下不翻八度（E4/E3 反复的根因）', () {
+    // 真实拨弦帧间波动会让 2×lag 处 NSDF 略高于基频峰——子谐波复查曾把它翻成低八度
+    final buf = Float32List(4096);
+    for (var i = 0; i < 4096; i++) {
+      final t = i / 44100.0;
+      buf[i] = 0.2 * math.sin(2 * math.pi * 329.63 * t) +
+          0.45 * math.sin(2 * math.pi * 659.26 * t) +
+          0.2 * math.sin(2 * math.pi * 988.89 * t);
+    }
+    // 多帧一致性（噪声种子不同）
+    final readings = <double>[];
+    for (var seed = 0; seed < 5; seed++) {
+      final rng = math.Random(seed);
+      for (var i = 0; i < 4096; i++) {
+        buf[i] += (rng.nextDouble() * 2 - 1) * 0.01;
+      }
+      final out = det.detect(Float32List.fromList(buf));
+      expect(out, isNotNull);
+      readings.add(out!);
+      expect(out, closeTo(329.63, 1.0), reason: 'seed=$seed → $out (E3=164.8 禁止)');
+    }
+    expect(readings.every((r) => r > 300), isTrue);
+  });
+
   test('ukulele 范围 (240-500Hz): 392/261.63/440Hz 检出（默认范围外）', () {
     final ukeDet = PitchDetector(minFreq: 240, maxFreq: 500);
     for (final f in [392.0, 261.63, 440.0]) {

@@ -20,6 +20,22 @@ Float32List synth(double f0, {int n = 5000}) {
 }
 
 void main() {
+  test('全链路 -50¢: E2 低 50¢ (80.06Hz) → needle 满偏 -1', () {
+    final rb = RingBuffer(8192);
+    final controller = TunerController();
+    final pipeline = TunerPipeline(
+      ringBuffer: rb,
+      detector: PitchDetector(),
+      controller: controller,
+    );
+    final f = 82.41 * math.pow(2, -50 / 1200);
+    rb.write(synth(f));
+    pipeline.tick();
+    expect(controller.state.noteLabel, 'E2');
+    expect(controller.state.cents, closeTo(-50, 3), reason: 'cents=${controller.state.cents}');
+    expect(controller.state.needle, closeTo(-1.0, 0.05), reason: 'needle=${controller.state.needle}');
+  });
+
   test('尤克里里模式: 管线以模式声明的范围重建 detector（392Hz 可检出）', () {
     final rb = RingBuffer(8192);
     final controller = TunerController();

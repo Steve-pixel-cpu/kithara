@@ -63,14 +63,13 @@ void main() {
       // 先有信号再丢失 → 音名不能残留
       controller.onPitch(110.0, 0.95);
       await tester.pump();
-      // 环心纯音名（弦号已移至弦条标签）；弦条 A2 是第 5 弦
-      expect(find.text('A2'), findsOneWidget); // 环心
-      expect(find.text('A2(5)'), findsOneWidget); // 弦条标签
+      // 环心 + 弦条都是纯 A2（弦号改为点击浮层提示）
+      expect(find.text('A2'), findsExactly(2));
       controller.onPitch(null, 0.9);
       await tester.pump();
-      // 环心无信号时整体不渲染（无 — 占位，无幽灵音名）；弦条标签带弦号常驻
+      // 环心无信号时整体不渲染；弦条标签常驻纯音名
       expect(find.text('—'), findsNothing);
-      expect(find.text('A2(5)'), findsOneWidget); // 弦条
+      expect(find.text('A2'), findsOneWidget); // 仅弦条
       expect(find.textContaining('拨'), findsOneWidget); // 引导语
     });
 
@@ -118,14 +117,16 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('音名带弦序号: 锁定 A2 显示 A2(5)', (tester) async {
+    testWidgets('弦号提示浮层: 点击弦条显示 5弦, 2s 后消失', (tester) async {
       final controller = TunerController();
       await tester.pumpWidget(harness(controller, KitharaTheme.dark));
       await tester.pump();
       await tester.pump();
-      controller.onPitch(110.0, 0.95); // A2 = 第 5 弦
+      await tester.tap(find.byKey(const Key('led_A2')));
       await tester.pump();
-      expect(find.text('A2(5)'), findsOneWidget);
+      expect(find.text('5弦'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 2100));
+      expect(find.text('5弦'), findsNothing);
     });
 
     testWidgets('弦模式显示 6 个 LED 弦条; 半音阶模式隐藏', (tester) async {

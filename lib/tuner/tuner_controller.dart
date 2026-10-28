@@ -48,6 +48,8 @@ class TunerController extends ChangeNotifier {
   StringTarget? _active;
   StringTarget? _pending;
   int _pendingCount = 0;
+  int? _noteSemi; // 当前显示音名的半音索引
+  int? _noteCandidateSemi; // 挂起中的新音名（需第 2 帧确认）
 
   /// 锁定保持：调准后信号丢失仍保持锁定视觉 2s（拨弦衰减是常态，
   /// 绿色不该随音量消失而闪灭）。实现为时间戳比较——无 Timer、无泄漏，
@@ -110,6 +112,23 @@ class TunerController extends ChangeNotifier {
     _lockHoldUntil = null;
     final mapperCents = _mapper.centsOffset(freq);
     _noteLabel = _mapper.noteName(_mapper.nearestSemitoneIndex(freq));
+
+    // 音名滞回：与当前音名偏离超过半音的突变，需连续 2 帧一致才换名
+    // （单帧八度噪声不再让 E4↔E3 反复跳；正常滑音每帧都不同则立即跟随）
+    final newSemi = _mapper.nearestSemitoneIndex(freq);
+    final changed = _noteSemi != null && newSemi != _noteSemi;
+    if (changed) {
+      if (_noteCandidateSemi == newSemi) {
+        _noteSemi = newSemi; // 连续第 2 帧 → 确认
+        _noteCandidateSemi = null;
+      } else {
+        _noteCandidateSemi = newSemi; // 第 1 帧 → 挂起，保持旧显示
+      }
+    } else {
+      _noteSemi = newSemi; // 与当前一致（或首次）
+      _noteCandidateSemi = null;
+    }
+    _noteLabel = _mapper.noteName(_noteSemi ?? newSemi);
 
     final match = _mode.matchString(freq);
     if (_mode.semitones.isNotEmpty) {
@@ -175,6 +194,9 @@ class TunerController extends ChangeNotifier {
     _pending = null;
     _pendingCount = 0;
     _lockHoldUntil = null;
+    // 模式切换 = 新音域，音名滞回历史作废
+    _noteSemi = null;
+    _noteCandidateSemi = null;
     notifyListeners();
   }
 

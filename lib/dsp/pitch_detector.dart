@@ -80,22 +80,22 @@ class PitchDetector {
       _sqCum[i + 1] = _sqCum[i] + _re[i] * _re[i];
     }
 
-    // 2. 范围预检：功率谱全局峰若落在检测范围外，基频必然在范围外
-    //    （例：500Hz 输入、maxFreq=350 时，其 lag 子谐波伪峰会被误报为 250Hz）
+    // 2. 范围预检（修正版）：若检测频段内的谱能量占比过低，
+    //    则基频在范围外（如 440Hz 输入吉他模式会被误报为其子谐波 220）。
+    //    不能只看全局主峰位置——高把位弦（E4 329Hz）的 2/3 次谐波
+    //    （659/989Hz）可能强于基频，全局峰在范围外但基频在范围内。
     _fft.transform(_re, _im);
-    var specBest = 0;
-    var specMax = -1.0;
+    var inBand = 0.0;
+    var total = 0.0;
+    final kMin = (minFreq * 0.8 * _fftSize / sampleRate).floor();
+    final kMax = (maxFreq * 1.2 * _fftSize / sampleRate).ceil();
     for (var k = 1; k < _fftSize ~/ 2; k++) {
       final mag = _re[k] * _re[k] + _im[k] * _im[k];
-      if (mag > specMax) {
-        specMax = mag;
-        specBest = k;
-      }
+      total += mag;
+      if (k >= kMin && k <= kMax) inBand += mag;
     }
-    final specFreq = specBest * sampleRate / _fftSize;
-    // 预检阈值 1.2：功率谱主峰若明显高于 maxFreq（如 440Hz 输入吉他模式），
-    // 其 2×lag 子谐波伪峰会被 MPM 误报为 maxFreq 内的频率（实测 440→220）
-    if (specFreq > maxFreq * 1.2 || specFreq < minFreq * 0.55) {
+    // 频段能量占比 < 10% → 基频在范围外，拒绝
+    if (total > 0 && inBand / total < 0.10) {
       _confidence = 0.0;
       return null;
     }
@@ -142,11 +142,14 @@ class PitchDetector {
       return null;
     }
 
-    // 6. 子谐波复查：仅当 2×lag 处 NSDF ≥ 0.85 且严格更高才移动（一次，不级联）
+    // 6. 子谐波复查（方向语义：2×lag 频率减半 = 报回基频）：
+    //    基频弱/倍频强的信号（拨弦位置效应）在 2×lag 处有真峰，移过去救回基频；
+    //    门槛从 0.001 收紧到 +0.05——高把位弦帧间波动约 ±0.02，
+    //    只有显著更高才翻，避免 E4↔E3 反复跳（根因：原 0.001 太敏感）
     final twice = bestLag * 2;
     if (twice <= maxLag &&
         _nsdf[twice] >= 0.85 &&
-        _nsdf[twice] > _nsdf[bestLag] + 0.001) {
+        _nsdf[twice] > _nsdf[bestLag] + 0.05) {
       bestLag = twice;
     }
 

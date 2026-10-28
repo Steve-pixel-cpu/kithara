@@ -55,6 +55,19 @@ void main() {
     expect(controller.state.noteLabel, 'A2'); // 保留
   });
 
+  test('音名滞回: 突变 >50¢ 需连续 2 帧确认才换音名（E4/E3 反复的 UI 根因）', () {
+    final controller = TunerController();
+    controller.setMode(TuningModes.chromatic);
+    controller.onPitch(329.63, 0.95); // E4
+    expect(controller.state.noteLabel, 'E4');
+    // 突变到 E3（一帧噪声/误检）→ 不换
+    controller.onPitch(164.81, 0.95);
+    expect(controller.state.noteLabel, 'E4', reason: '单帧突变不换名');
+    // 连续第二帧 E3 → 确认换名
+    controller.onPitch(164.81, 0.95);
+    expect(controller.state.noteLabel, 'E3');
+  });
+
   test('锁弦: 字符串模式 2 次同弦才切换 activeString', () {
     // 先到 D3 附近一次
     controller.onPitch(146.83, 0.95);

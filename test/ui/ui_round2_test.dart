@@ -307,9 +307,15 @@ void main() {
       expect(ringNote.style!.fontSize, 72); // 环心音名（弦条是 12）
       // 环心 cents 数字不渲染
       expect(find.textContaining('¢'), findsNothing);
-      // 弦条标签带弦号: E2(6) / A2(5)
-      expect(find.text('E2(6)'), findsOneWidget);
-      expect(find.text('A2(5)'), findsOneWidget);
+      // 弦条标签纯音名（弦号改由点击提示浮层展示）
+      expect(find.text('E2(6)'), findsNothing);
+      // 点击 A2 弦条 → 浮层显示「5弦」
+      await tester.tap(find.byKey(const Key('led_A2')));
+      await tester.pump();
+      expect(find.text('5弦'), findsOneWidget);
+      // 2s 后消失
+      await tester.pump(const Duration(milliseconds: 2100));
+      expect(find.text('5弦'), findsNothing);
       // 品牌字标加粗 + fontFamily 注入
       final wordmark = tester.widget<Text>(find.text('K I T H A R A'));
       expect(wordmark.style!.fontWeight, FontWeight.w700);

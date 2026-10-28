@@ -1,4 +1,6 @@
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 
@@ -58,6 +60,8 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
   bool _micStarted = false;
   bool _permissionDenied = false;
   bool _wasInTune = false;
+  String? _stringHint; // 选弦提示（6弦），2s 自动消失
+  Timer? _stringHintTimer;
 
   // 弹簧动画：把 15Hz 的检测跳变插值成 60fps 连续运动
   late final AnimationController _springCtrl = AnimationController(
@@ -133,6 +137,7 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
 
   @override
   void dispose() {
+    _stringHintTimer?.cancel();
     _springCtrl.dispose();
     _breathCtrl.dispose();
     WidgetsBinding.instance.removeObserver(this);
@@ -342,6 +347,28 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                         size: 300,
                         breathPhase: _breathCtrl.value,
                       ),
+                      // 选弦提示浮层（2s 自动消失）
+                      if (_stringHint != null)
+                        Positioned(
+                          top: 8,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: t.accentSoft,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: t.accent),
+                            ),
+                            child: Text(
+                              _stringHint!,
+                              style: TextStyle(
+                                color: t.text,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
                       // 量程标注（弧两端 + 顶部）
                       Positioned(
                         left: 18,
@@ -448,6 +475,7 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                             widget.haptics?.selectionClick();
                             widget.controller.selectString(st.semitoneIndex);
                             widget.onSelectString?.call(st.semitoneIndex);
+                            _showStringHint(st);
                           },
                           child: _StringBar(
                             key: Key('led_${st.name}'),
@@ -470,14 +498,17 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
     );
   }
 
-  /// 弦条标签: 音名(弦号)——初学者友好；半音阶模式或找不到时纯音名
-  String stringNoOf(StringTarget target) {
+  /// 选弦提示浮层：显示「6弦」2 秒后淡出（初学者辅助）
+  void _showStringHint(StringTarget target) {
     final s = widget.controller.state;
     final idx = s.mode.semitones.indexOf(target.semitoneIndex);
-    if (idx >= 0 && s.mode.semitones.isNotEmpty) {
-      return '${target.name}(${s.mode.semitones.length - idx})';
-    }
-    return target.name;
+    if (idx < 0) return;
+    final stringNo = s.mode.semitones.length - idx;
+    setState(() => _stringHint = '$stringNo弦');
+    _stringHintTimer?.cancel();
+    _stringHintTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _stringHint = null);
+    });
   }
 
   /// 状态引导语：告诉用户下一步做什么，替代"未检测到信号"。
@@ -731,20 +762,15 @@ class _StringBar extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 6),
-        Builder(builder: (ctx) {
-          // 弦号: 所在 TunerScreen 传入（通过 target 顺序推断不便，从 widget 层拿）
-          return Text(
-            ctx.findAncestorStateOfType<_TunerScreenState>()
-                    ?.stringNoOf(target) ??
-                target.name,
-            style: TextStyle(
-              color: inTune ? t.ok : (active ? t.text : t.text3),
-              fontSize: 12,
-              fontFeatures: const [FontFeature.tabularFigures()],
-              fontWeight: active || inTune ? FontWeight.w600 : FontWeight.w400,
-            ),
-          );
-        }),
+        Text(
+          target.name,
+          style: TextStyle(
+            color: inTune ? t.ok : (active ? t.text : t.text3),
+            fontSize: 12,
+            fontFeatures: const [FontFeature.tabularFigures()],
+            fontWeight: active || inTune ? FontWeight.w600 : FontWeight.w400,
+          ),
+        ),
       ],
     );
   }
