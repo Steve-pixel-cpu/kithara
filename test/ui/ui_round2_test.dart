@@ -200,10 +200,10 @@ void main() {
       // GlowRing 存在且带刻度开关
       final ring = tester.widget<GlowRing>(find.byType(GlowRing));
       expect(ring.showTicks, isTrue);
-      // 两端量程标注
+      // 两端量程标注（顶部 0 与刻度重叠，已移除）
       expect(find.text('-50'), findsOneWidget);
       expect(find.text('+50'), findsOneWidget);
-      expect(find.text('0'), findsOneWidget);
+      expect(find.text('0'), findsNothing);
       // 品牌字标
       expect(find.text('K I T H A R A'), findsOneWidget);
       // 呼吸动画推进一帧不异常
@@ -264,13 +264,16 @@ void main() {
       expect(find.text('降噪灵敏度'), findsNothing);
       await tester.tap(find.text('取消'));
       await tester.pump();
-      // 设置弹窗含降噪
+      // 设置弹窗含降噪（下拉框）
       await tester.tap(find.byKey(const Key('settings_btn')));
       await tester.pump();
       expect(find.text('降噪灵敏度'), findsOneWidget);
-      // 点'严格' → 回调触发
-      await tester.tap(find.text('严格'));
+      // 打开下拉选'严格' → 回调触发
+      await tester.tap(find.byKey(const Key('noise_gate_dropdown')));
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('严格（嘈杂环境）').last);
+      await tester.pump(const Duration(milliseconds: 300));
       expect(gateChanged, isTrue);
     });
 

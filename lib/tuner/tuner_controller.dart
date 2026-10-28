@@ -49,25 +49,50 @@ class TunerController extends ChangeNotifier {
   StringTarget? _pending;
   int _pendingCount = 0;
 
-  TunerState get state => TunerState(
-        mode: _mode,
-        a4: _a4,
-        hasSignal: _hasSignal,
-        noteLabel: _noteLabel,
-        cents: _cents,
-        needle: _needle,
-        activeString: _active,
-        inTune: _active != null && _cents.abs() <= 5.0,
-      );
+  /// 锁定保持：调准后信号丢失仍保持锁定视觉 2s（拨弦衰减是常态，
+  /// 绿色不该随音量消失而闪灭）。实现为时间戳比较——无 Timer、无泄漏，
+  /// 每次读 state 即时判定。
+  DateTime? _lockHoldUntil;
+  static const _lockHoldDuration = Duration(seconds: 2);
+
+  /// 可注入时钟（测试用）
+  DateTime Function() _now = DateTime.now;
+
+  @visibleForTesting
+  set nowForTest(DateTime Function() f) => _now = f;
+
+  TunerState get state {
+    final lockHeld = _lockHoldUntil != null &&
+        _now().isBefore(_lockHoldUntil!);
+    final liveTune = _active != null && _cents.abs() <= 5.0 && _hasSignal;
+    final inTune = liveTune || (lockHeld && _active != null);
+    return TunerState(
+      mode: _mode,
+      a4: _a4,
+      hasSignal: _hasSignal,
+      noteLabel: _noteLabel,
+      cents: _cents,
+      needle: _hasSignal ? _needle : _needle,
+      activeString: _active,
+      inTune: inTune,
+    );
+  }
 
   /// 管线送来一帧音高；freq=null 表示本帧无有效音高（静音/不可靠）。
   void onPitch(double? freq, double confidence) {
     if (freq == null) {
       _hasSignal = false; // noteLabel/cents/needle/active 保留，UI 平滑
+      // 锁定保持窗口：已调准状态下信号消失，保持绿色 2s
+      final wasTuned = _active != null && _cents.abs() <= 5.0;
+      if (wasTuned) {
+        _lockHoldUntil = _now().add(_lockHoldDuration);
+      }
       notifyListeners();
       return;
     }
     _hasSignal = true;
+    // 新信号到来 → 结束保持窗口，回到实时判定
+    _lockHoldUntil = null;
     final mapperCents = _mapper.centsOffset(freq);
     _noteLabel = _mapper.noteName(_mapper.nearestSemitoneIndex(freq));
 
@@ -134,6 +159,7 @@ class TunerController extends ChangeNotifier {
     _active = null;
     _pending = null;
     _pendingCount = 0;
+    _lockHoldUntil = null;
     notifyListeners();
   }
 

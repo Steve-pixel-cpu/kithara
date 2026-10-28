@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kithara/tuner/tuner_controller.dart';
 import 'package:kithara/tuner/tuning_modes.dart';
@@ -63,6 +64,18 @@ void main() {
     // 第二次 A2 → 切换
     controller.onPitch(110.0, 0.95);
     expect(controller.state.activeString!.name, 'A2');
+  });
+
+  test('锁定保持窗口: 信号丢失 2s 内 inTune 保持, 过期释放', () {
+    var now = DateTime(2026, 1, 1);
+    final controller = TunerController()..nowForTest = () => now;
+    controller.onPitch(110.0 * 1.001, 0.95); // A2 锁定
+    controller.onPitch(null, 0.9); // 信号丢失 → 启动保持窗口
+    expect(controller.state.inTune, isTrue, reason: '保持窗口内');
+    now = now.add(const Duration(milliseconds: 1500));
+    expect(controller.state.inTune, isTrue, reason: '1.5s 仍在窗口内');
+    now = now.add(const Duration(milliseconds: 600)); // 累计 2.1s
+    expect(controller.state.inTune, isFalse, reason: '过期释放');
   });
 
   test('setMode: 清锁弦计数, activeString 重置', () {

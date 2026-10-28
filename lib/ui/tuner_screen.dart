@@ -367,24 +367,13 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                               ],
                             )),
                       ),
-                      Positioned(
-                        top: 12,
-                        child: Text('0',
-                            style: TextStyle(
-                              color: t.text3,
-                              fontSize: 11,
-                              fontFeatures: const [
-                                FontFeature.tabularFigures()
-                              ],
-                            )),
-                      ),
                       if (s.hasSignal)
                         Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            // 环心音名（无信号整体不渲染，环心留给指针轴点）
+                            // 环心音名（带弦序号 E2(6) 方便初学者）
                             Text(
-                              s.noteLabel,
+                              _noteWithIndex(s),
                               key: const Key('in_tune_indicator'),
                               style: TextStyle(
                                 color: s.inTune
@@ -482,6 +471,20 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
     );
   }
 
+  /// 环心音名：弦模式下带弦序号（E2(6)），半音阶模式纯音名。
+  String _noteWithIndex(TunerState s) {
+    if (s.activeString != null) {
+      final idx = s.mode.semitones
+          .indexOf(s.activeString!.semitoneIndex);
+      if (idx >= 0) {
+        // 弦序号从 6→1（低到高），数组顺序即弦序
+        final stringNo = s.mode.semitones.length - idx;
+        return '${s.noteLabel}($stringNo)';
+      }
+    }
+    return s.noteLabel;
+  }
+
   /// 状态引导语：告诉用户下一步做什么，替代"未检测到信号"。
   String _guidance(TunerState s) {
     if (s.mode.semitones.isEmpty) {
@@ -515,45 +518,27 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('降噪灵敏度', style: TextStyle(color: t.text2, fontSize: 14)),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                for (final (label, val) in [
-                  ('宽松', 'low'),
-                  ('标准', 'medium'),
-                  ('严格', 'high'),
-                ])
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          side: BorderSide(
-                            color: widget.noiseGate == val
-                                ? t.accent
-                                : t.borderStrong,
-                          ),
-                          backgroundColor: widget.noiseGate == val
-                              ? t.accentSoft
-                              : Colors.transparent,
-                        ),
-                        onPressed: () {
-                          widget.haptics?.selectionClick();
-                          widget.onNoiseGateChanged?.call(val);
-                          Navigator.pop(ctx);
-                        },
-                        child: Text(
-                          label,
-                          style: TextStyle(
-                            color:
-                                widget.noiseGate == val ? t.text : t.text2,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+            const SizedBox(height: 4),
+            DropdownButton<String>(
+              key: const Key('noise_gate_dropdown'),
+              value: widget.noiseGate,
+              isExpanded: true,
+              underline: const SizedBox.shrink(),
+              dropdownColor: t.popBg,
+              items: const [
+                DropdownMenuItem(
+                    value: 'low', child: Text('宽松（安静房间）')),
+                DropdownMenuItem(
+                    value: 'medium', child: Text('标准（日常）')),
+                DropdownMenuItem(
+                    value: 'high', child: Text('严格（嘈杂环境）')),
               ],
+              onChanged: (v) {
+                if (v == null || v == widget.noiseGate) return;
+                widget.haptics?.selectionClick();
+                widget.onNoiseGateChanged?.call(v);
+                Navigator.pop(ctx);
+              },
             ),
           ],
         ),

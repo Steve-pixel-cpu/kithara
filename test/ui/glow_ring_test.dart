@@ -63,7 +63,8 @@ void main() {
       // 先有信号再丢失 → 音名不能残留
       controller.onPitch(110.0, 0.95);
       await tester.pump();
-      expect(find.text('A2'), findsWidgets); // 环心 + 弦条
+      expect(find.text('A2(5)'), findsOneWidget); // 环心带弦号
+      expect(find.text('A2'), findsOneWidget); // 弦条标签
       controller.onPitch(null, 0.9);
       await tester.pump();
       // 环心无信号时整体不渲染（无 — 占位，无幽灵音名）；弦条 LED 标签常驻
@@ -93,6 +94,37 @@ void main() {
       expect(ring.locked, isTrue);
       expect(ring.needle, 0.0); // 视觉指针钉死正中
       expect(find.textContaining('已调准'), findsOneWidget);
+    });
+
+    testWidgets('调准后信号短暂丢失: 2s 内保持锁定绿（不因衰减迅速消失）', (tester) async {
+      final controller = TunerController();
+      await tester.pumpWidget(harness(controller, KitharaTheme.dark));
+      await tester.pump();
+      await tester.pump();
+      controller.onPitch(110.0 * 1.001, 0.95); // A2 锁定
+      await tester.pump();
+      final ring1 = tester.widget<GlowRing>(find.byType(GlowRing));
+      expect(ring1.locked, isTrue);
+      // 声音衰减 → 信号丢失
+      controller.onPitch(null, 0.9);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      final ring2 = tester.widget<GlowRing>(find.byType(GlowRing));
+      expect(ring2.locked, isTrue, reason: '2s 保持窗口内仍是锁定态');
+      // 超过 2s 的"过期释放"由 controller 单元测试（fakeAsync）覆盖；
+      // 这里 pump 过保持窗口让 Timer 自然到期（框架禁 pending Timer）
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('音名带弦序号: 锁定 A2 显示 A2(5)', (tester) async {
+      final controller = TunerController();
+      await tester.pumpWidget(harness(controller, KitharaTheme.dark));
+      await tester.pump();
+      await tester.pump();
+      controller.onPitch(110.0, 0.95); // A2 = 第 5 弦
+      await tester.pump();
+      expect(find.text('A2(5)'), findsOneWidget);
     });
 
     testWidgets('弦模式显示 6 个 LED 弦条; 半音阶模式隐藏', (tester) async {
