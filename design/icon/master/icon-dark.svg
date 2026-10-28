@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Kithara app icon — master, dark theme, full-bleed square (system applies corner mask) -->
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="78%">
+      <stop offset="0%" stop-color="#1C2130"/>
+      <stop offset="100%" stop-color="#10131B"/>
+    </radialGradient>
+    <linearGradient id="green" gradientUnits="userSpaceOnUse" x1="512" y1="290" x2="512" y2="682">
+      <stop offset="0%" stop-color="#47E6A2"/>
+      <stop offset="100%" stop-color="#2BC489"/>
+    </linearGradient>
+    <filter id="glow" x="-300%" y="-300%" width="700%" height="700%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+
+  <!-- five gray strings (E A D G B E — the middle one is tuned green) -->
+  <g stroke="#555E70" stroke-width="13" stroke-linecap="round">
+    <line x1="352" y1="290" x2="352" y2="682"/>
+    <line x1="416" y1="290" x2="416" y2="682"/>
+    <line x1="480" y1="290" x2="480" y2="682"/>
+    <line x1="544" y1="290" x2="544" y2="682"/>
+    <line x1="608" y1="290" x2="608" y2="682"/>
+    <line x1="672" y1="290" x2="672" y2="682"/>
+  </g>
+
+  <!-- tuned string: soft glow + bright core -->
+  <line x1="512" y1="290" x2="512" y2="682" stroke="#34D399" stroke-width="44"
+        stroke-linecap="round" opacity="0.28" filter="url(#glow)"/>
+  <line x1="512" y1="290" x2="512" y2="682" stroke="url(#green)" stroke-width="17"
+        stroke-linecap="round"/>
+
+  <!-- soundbox -->
+  <rect x="300" y="682" width="424" height="106" rx="53"
+        fill="#232936" stroke="#39414F" stroke-width="3"/>
+
+  <!-- symmetric arms -->
+  <g fill="none" stroke="#6B7488" stroke-width="32" stroke-linecap="round">
+    <path d="M 340 702 C 252 652 222 468 240 262"/>
+    <path d="M 684 702 C 772 652 802 468 784 262"/>
+  </g>
+
+  <!-- yoke / crossbar (round caps suggest tuning pegs) -->
+  <line x1="218" y1="248" x2="806" y2="248" stroke="#6B7488" stroke-width="34"
+        stroke-linecap="round"/>
+</svg>
