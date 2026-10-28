@@ -97,8 +97,23 @@ class TuningModes {
     detectorMinFreq: 140, detectorMaxFreq: 400,
   );
 
+  // 常见扩展: Drop C / Eb(半音降) / D(全音降)
+  static const dropC = TuningMode(
+    'drop_c', 'Drop C', [-33, -26, -21, -16, -12, -7], // C2 G2 C3 F3 A3 D4
+    detectorMinFreq: 60, detectorMaxFreq: 350,
+  );
+  static const eb = TuningMode(
+    'eb', 'Eb 降半音', [-30, -25, -20, -15, -11, -6], // D#2 G#2 C#3 F#3 A#3 D#4
+    detectorMinFreq: 65, detectorMaxFreq: 350,
+  );
+  static const dTuning = TuningMode(
+    'd_tuning', 'D 降全音', [-31, -26, -21, -16, -12, -7], // D2 G2 C3 F3 A3 D4
+    detectorMinFreq: 65, detectorMaxFreq: 350,
+  );
+
   static const List<TuningMode> all = [
-    standard, dropD, openD, openG, dadgad,
+    standard, dropD, dropC, eb, dTuning,
+    openD, openG, dadgad,
     ukulele, ukuleleLowG, ukuleleBaritone, chromatic,
   ];
 

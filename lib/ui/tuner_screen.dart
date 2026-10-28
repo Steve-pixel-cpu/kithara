@@ -228,6 +228,19 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                       borderRadius: BorderRadius.circular(12),
                       side: BorderSide(color: t.border),
                     ),
+                    onSelected: (m) {
+                      widget.haptics?.selectionClick();
+                      widget.controller.setMode(m);
+                    },
+                    constraints: const BoxConstraints(maxHeight: 420),
+                    itemBuilder: (_) => [
+                      for (final m in TuningModes.all)
+                        PopupMenuItem(
+                          value: m,
+                          child: Text(m.label,
+                              style: TextStyle(color: t.text)),
+                        ),
+                    ],
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 8),
@@ -245,18 +258,6 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                         ],
                       ),
                     ),
-                    onSelected: (m) {
-                      widget.haptics?.selectionClick();
-                      widget.controller.setMode(m);
-                    },
-                    itemBuilder: (_) => [
-                      for (final m in TuningModes.all)
-                        PopupMenuItem(
-                          value: m,
-                          child: Text(m.label,
-                              style: TextStyle(color: t.text)),
-                        ),
-                    ],
                   ),
                   ),
                   Row(

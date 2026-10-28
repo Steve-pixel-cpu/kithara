@@ -43,6 +43,27 @@ void main() {
     }
   });
 
+  test('drop_c: C2 G C F A D', () {
+    final m = TuningModes.byId('drop_c');
+    expect(m.strings.map((s) => s.name).toList(),
+        ['C2', 'G2', 'C3', 'F3', 'A3', 'D4']);
+    // 检测下限覆盖 C2=65.41Hz
+    expect(m.detectorMinFreq, lessThan(65.41));
+  });
+
+  test('eb: 半音降 Eb2 Ab2 Db3 Gb3 Bb3 Eb4', () {
+    final m = TuningModes.byId('eb');
+    expect(m.strings.map((s) => s.name).toList(),
+        ['D#2', 'G#2', 'C#3', 'F#3', 'A#3', 'D#4']);
+    expect(m.strings[0].frequency, closeTo(77.78, 0.01));
+  });
+
+  test('d_tuning: 全音降 D2 G2 C3 F3 A3 D4', () {
+    final m = TuningModes.byId('d_tuning');
+    expect(m.strings.map((s) => s.name).toList(),
+        ['D2', 'G2', 'C3', 'F3', 'A3', 'D4']);
+  });
+
   test('ukulele 标准调弦 GCEA (4弦, re-entrant 高音G)', () {
     final uke = TuningModes.byId('ukulele');
     expect(uke.strings, hasLength(4));
