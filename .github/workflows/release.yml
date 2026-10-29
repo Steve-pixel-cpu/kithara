@@ -1,0 +1,112 @@
+# Kithara 安卓包构建 → GitHub Release
+#
+# 触发:
+#   - push v* 标签 (如 v1.0.0): 构建 release APK → 创建 GitHub Release
+#   - workflow_dispatch (手动): 只构建 + 传 workflow artifact, 不发 Release
+#
+# 说明:
+#   - Flutter 官方 stable + 中国镜像加速（pub/引擎产物）
+#   - Java 21（AGP 8 要求 >=17）
+#   - debug 签名（个人分发足够; 上架另配 keystore 走 secrets）
+#   - 版本号取自 tag（v1.2.3 -> 1.2.3），写入 pubspec version 再构建
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Flutter (stable, CN mirrors)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+        env:
+          PUB_HOSTED_URL: https://pub.flutter-io.cn
+          FLUTTER_STORAGE_BASE_URL: https://storage.flutter-io.cn
+
+      - name: Version from tag
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          echo "RELEASE_VERSION=$V" >> "$GITHUB_ENV"
+          # 写入 pubspec（构建号固定 1，版本来自 tag）
+          sed -i "s/^version:.*/version: $V+1/" pubspec.yaml
+
+      - name: Pub get
+        env:
+          PUB_HOSTED_URL: https://pub.flutter-io.cn
+          FLUTTER_STORAGE_BASE_URL: https://storage.flutter-io.cn
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+
+      - name: Test
+        run: flutter test
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Rename APK with version
+        shell: bash
+        run: |
+          V="${RELEASE_VERSION:-0.0.0-manual}"
+          cp build/app/outputs/flutter-apk/app-release.apk \
+             "kithara-$V.apk"
+          ls -la kithara-*.apk
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kithara-apk
+          if-no-files-found: error
+          path: kithara-*.apk
+
+  release:
+    needs: [build-apk]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: kithara-apk
+          path: dist
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "Kithara ${GITHUB_REF_NAME}" \
+            --notes "Kithara 吉他调音器 ${GITHUB_REF_NAME}
+
+          - 实时调音（MPM 音高检测，Float64 FFT）
+          - 12 种调弦：吉他 8 种 + 尤克里里 3 种 + 半音阶
+          - 粘性锁弦、量程自适应仪表、降噪灵敏度可调
+          - 深浅双主题（含跟随系统）" \
+            || true
+          gh release upload "$GITHUB_REF_NAME" dist/* --clobber
