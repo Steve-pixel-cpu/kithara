@@ -565,8 +565,9 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
         _ => '标准（日常）',
       };
 
-  /// 圆角下拉选择器：选项列表也是圆角容器+圆角高亮，风格与弹窗一致
-  Future<String?> _showGatePicker(BuildContext ctx, KitharaTheme t) {
+  /// 圆角下拉选择器：选项列表也是圆角容器+圆角高亮，风格与弹窗一致。
+  /// [current] 为当前选中档位——弹窗 route 不随父重建，必须显式传入而非读 widget。
+  Future<String?> _showGatePicker(BuildContext ctx, KitharaTheme t, String current) {
     return showModalBottomSheet<String>(
       context: ctx,
       backgroundColor: t.popBg,
@@ -604,24 +605,17 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                           horizontal: 14, vertical: 14),
                       decoration: BoxDecoration(
                         // 选中态同弦号胶囊/LED 淡绿系（okSoft 底 + ok 描边）
-                        color: widget.noiseGate == val
-                            ? t.okSoft
-                            : Colors.transparent,
+                        color: current == val ? t.okSoft : Colors.transparent,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: widget.noiseGate == val
-                              ? t.ok
-                              : Colors.transparent,
+                          color: current == val ? t.ok : Colors.transparent,
                         ),
                       ),
                       child: Text(label,
                           style: TextStyle(
-                            color: widget.noiseGate == val
-                                ? t.ok
-                                : t.text2,
-                            fontWeight: widget.noiseGate == val
-                                ? FontWeight.w600
-                                : FontWeight.w400,
+                            color: current == val ? t.ok : t.text2,
+                            fontWeight:
+                                current == val ? FontWeight.w600 : FontWeight.w400,
                           )),
                     ),
                   ),
@@ -635,9 +629,14 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
 
   void _showSettingsDialog(BuildContext context) {
     final t = widget.theme;
+    // 弹窗是 Navigator 独立 overlay route，builder 只在弹出时执行一次，
+    // 父层 setState 不会传播进来——档位用局部变量 + StatefulBuilder 自持状态，
+    // 选档后立即刷新触发器文本，不必关掉重开。
+    String gate = widget.noiseGate;
     showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
         backgroundColor: t.popBg,
         title: Text('设置', style: TextStyle(color: t.text)),
         content: Column(
@@ -652,8 +651,9 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
               borderRadius: BorderRadius.circular(12),
               onTap: () async {
                 widget.haptics?.selectionClick();
-                final picked = await _showGatePicker(ctx, t);
-                if (picked != null && picked != widget.noiseGate) {
+                final picked = await _showGatePicker(ctx, t, gate);
+                if (picked != null && picked != gate) {
+                  setDialogState(() => gate = picked);
                   widget.onNoiseGateChanged?.call(picked);
                 }
               },
@@ -670,7 +670,7 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                   children: [
                     Expanded(
                       child: Text(
-                        _gateLabel(widget.noiseGate),
+                        _gateLabel(gate),
                         style: TextStyle(color: t.text, fontSize: 15),
                       ),
                     ),
@@ -690,6 +690,7 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
             child: Text('关闭', style: TextStyle(color: t.text2)),
           ),
         ],
+      ),
       ),
     );
   }

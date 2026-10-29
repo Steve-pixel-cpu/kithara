@@ -275,6 +275,39 @@ void main() {
       expect(gateChanged, isTrue);
     });
 
+    testWidgets('选档后设置弹窗触发器文本立即刷新（弹窗 route 不随父重建）', (tester) async {
+      final controller = TunerController();
+      String? changed;
+      await tester.pumpWidget(MaterialApp(
+        theme: KitharaTheme.dark.toThemeData(),
+        home: TunerScreen(
+          controller: controller,
+          mic: MicStream(),
+          micPermission: _Granted(),
+          haptics: _NoHaptics(),
+          theme: KitharaTheme.dark,
+          noiseGate: 'medium',
+          // 只记录回调不触发父重建: 证明弹窗内文本刷新不依赖父层 setState
+          onNoiseGateChanged: (g) => changed = g,
+        ),
+      ));
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('settings_btn')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('noise_gate_dropdown')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('严格（嘈杂环境）').last);
+      // pop 选择单: 走完退场动画（含 barrier 消散），只剩设置弹窗本身
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(changed, 'high');
+      // 弹窗仍开着: 触发器文本必须已是新档位, 旧档位文本消失
+      expect(find.text('严格（嘈杂环境）'), findsOneWidget);
+      expect(find.text('标准（日常）'), findsNothing);
+    });
+
     testWidgets('刻度在弧内侧: 刻度半径 < 弧半径', (tester) async {
       final controller = TunerController();
       await tester.pumpWidget(harness(controller, KitharaTheme.dark));
