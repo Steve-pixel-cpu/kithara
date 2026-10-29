@@ -135,31 +135,31 @@ class _GlowRingPainter extends CustomPainter {
       ..color = locked ? t.ok : t.borderStrong;
     canvas.drawArc(rect, zoneStart, zoneSpan, false, zonePaint);
 
-    if (!hasSignal) return;
-
+    // 指针常驻：无信号也画（停在 -1 满偏待命），只是不放光点辉光
     final n = needle.clamp(-1.0, 1.0);
     final headAngle = _startAngle + _sweep * (0.5 + n * 0.5);
 
-    // 光点辉光：常规态强一点，接近/锁定态收敛
-    final glowAlpha = locked ? 0.30 : (near ? 0.35 : 0.5);
-    final glow = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 12
-      ..strokeCap = StrokeCap.round
-      ..color = stateColor.withValues(alpha: glowAlpha)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9);
-    canvas.drawArc(rect, headAngle - 0.02, 0.04, false, glow);
+    if (hasSignal) {
+      // 光点辉光：常规态强一点，接近/锁定态收敛
+      final glowAlpha = locked ? 0.30 : (near ? 0.35 : 0.5);
+      final glow = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 12
+        ..strokeCap = StrokeCap.round
+        ..color = stateColor.withValues(alpha: glowAlpha)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9);
+      canvas.drawArc(rect, headAngle - 0.02, 0.04, false, glow);
 
-    // 光点核心（实心锐利）
-    final core = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 8
-      ..strokeCap = StrokeCap.round
-      ..color = stateColor;
-    canvas.drawArc(rect, headAngle - 0.012, 0.024, false, core);
+      // 光点核心（实心锐利）
+      final core = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 8
+        ..strokeCap = StrokeCap.round
+        ..color = stateColor;
+      canvas.drawArc(rect, headAngle - 0.012, 0.024, false, core);
+    }
 
-    // 环心指针：细杆从中心外侧 55% 半径起笔到光点，不画轴心圆点
-    // （中心留给音名文字，避免圆点与文字打架）
+    // 环心指针：细杆从中心外侧 55% 半径起笔到光点（常驻）
     final innerR = radius * 0.55;
     final tail =
         center + Offset(math.cos(headAngle), math.sin(headAngle)) * innerR;
