@@ -59,7 +59,8 @@ jobs:
         run: flutter analyze --no-fatal-infos
 
       - name: Test
-        run: flutter test
+        # golden 像素比对依赖本地生成环境(Windows), Linux runner 字体渲染有差异, CI 排除
+        run: flutter test --exclude-tags=golden
 
       - name: Build release APK
         run: flutter build apk --release
