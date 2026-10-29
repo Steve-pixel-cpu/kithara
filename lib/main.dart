@@ -207,10 +207,19 @@ class TunerPipelineBridge {
   double? _lastA4;
   String _lastGate = 'medium';
 
+  // 检测节流 10Hz: 人对指针方向变化的反应 ~200ms, 拧弦动作 0.5-2s,
+  // 10Hz 刷新绰绰有余; DSP(CPU/电量)开销直降 2/3
+  static const _detectInterval = Duration(milliseconds: 100);
+  DateTime _lastDetect = DateTime.now().subtract(_detectInterval);
+
   String get lastSavedModeId => _lastMode?.id ?? 'standard';
   double get lastSavedA4 => _lastA4 ?? 440.0;
 
   void tick() {
+    // 检测节流: Ticker 60fps 进来, 每 100ms 才真正检测一次
+    final now = DateTime.now();
+    if (now.difference(_lastDetect) < _detectInterval) return;
+    _lastDetect = now;
     // 设置变更检测（含首次）：模式/降噪变更 → 重建检测器；变更即持久化
     final s = controller.state;
     if (noiseGate != _lastGate) {
