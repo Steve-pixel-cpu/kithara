@@ -375,5 +375,91 @@ void main() {
       await tester.pump();
       expect(toggled, isTrue);
     });
+
+    testWidgets('降噪接线: 选「严格」后 bridge.noiseGate 变 high（DSP 门限实际生效）', (tester) async {
+      const channel = MethodChannel('com.llfbandit.record/messages');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'hasPermission' || call.method == 'isRecording') {
+          return true;
+        }
+        return null;
+      });
+      SharedPreferences.setMockInitialValues({});
+      // 测试环境 Ahem 字体每字形 1em 见方，底部弹层三个选项超出半屏
+      // (showModalBottomSheet 默认限高) 且不可滚动 → 缩小文本让第 3 项可见。
+      // 注意: MaterialApp 内部 MediaQuery.fromView 会重置外层 textScaler,
+      // 必须走 platformDispatcher。
+      tester.platformDispatcher.textScaleFactorTestValue = 0.5;
+      addTearDown(tester.platformDispatcher.clearAllTestValues);
+      await tester.pumpWidget(const MediaQuery(
+        data: MediaQueryData(platformBrightness: Brightness.light),
+        child: KitharaApp(),
+      ));
+      await tester.pump();
+      await tester.pump();
+
+      // bug 26 后续: UI 档位此前没接到 DSP——bridge.noiseGate 无人写入,
+      // RMS 门限恒为 medium。「严格」必须真实改变检测器门限。
+      await tester.binding.setSurfaceSize(const Size(1080, 2400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      dynamic homeState;
+          tester.element(find.byType(TunerScreen)).visitAncestorElements((el) {
+            if (el is StatefulElement &&
+                el.widget.runtimeType.toString() == '_TunerHome') {
+              homeState = el.state;
+              return false;
+            }
+            return true;
+          });
+      expect(homeState.bridge.noiseGate, 'medium'); // 初值
+
+      await tester.tap(find.byKey(const Key('settings_btn')));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const Key('noise_gate_dropdown')));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
+      // 测试环境 Ahem 字体每字形 1em 见方，第 3 项渲染在视口外无法 tap，
+      // 直接触发其 InkWell 回调验证接线（菜单渲染问题见 backlog）
+      final strictFinder = find.ancestor(
+        of: find.text('严格（嘈杂环境）'),
+        matching: find.byType(InkWell),
+      );
+      (tester.widget(strictFinder) as InkWell).onTap!();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(homeState.bridge.noiseGate, 'high'); // 接线生效
+    });
+
+    testWidgets('降噪接线: 恢复持久化档位 high → bridge 初值即 high', (tester) async {
+      const channel = MethodChannel('com.llfbandit.record/messages');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'hasPermission' || call.method == 'isRecording') {
+          return true;
+        }
+        return null;
+      });
+      SharedPreferences.setMockInitialValues({'noiseGate': 'high'});
+      await tester.pumpWidget(const MediaQuery(
+        data: MediaQueryData(platformBrightness: Brightness.light),
+        child: KitharaApp(),
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 400));
+
+      dynamic homeState;
+          tester.element(find.byType(TunerScreen)).visitAncestorElements((el) {
+            if (el is StatefulElement &&
+                el.widget.runtimeType.toString() == '_TunerHome') {
+              homeState = el.state;
+              return false;
+            }
+            return true;
+          });
+      expect(homeState.bridge.noiseGate, 'high');
+    });
   });
 }

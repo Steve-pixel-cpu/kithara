@@ -135,10 +135,22 @@ class _TunerHomeState extends State<_TunerHome> {
       mic: _mic,
       // App 层统一保存（mode/a4 + 当前主题一起落盘，不互相覆盖）
       onSave: widget.settingsSaver,
+      // 降噪档位接线进 DSP: 桥的 tick() 按此映射 RMS 门限（bug: 此前
+      // 无人写入, 「严格/宽松」形同虚设, 门限恒 medium）
+      noiseGate: widget.noiseGate ?? 'medium',
     );
     _restoreSettings();
     _ticker = Ticker((_) => _bridge.tick());
     _ticker!.start();
+  }
+
+  @override
+  void didUpdateWidget(covariant _TunerHome oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // App 层选档（或恢复）后下行同步: 桥在下次 tick 里检测到变更即重建检测器
+    if (widget.noiseGate != oldWidget.noiseGate) {
+      _bridge.noiseGate = widget.noiseGate ?? 'medium';
+    }
   }
 
   Future<void> _restoreSettings() async {
