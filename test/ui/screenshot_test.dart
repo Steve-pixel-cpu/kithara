@@ -1,8 +1,9 @@
+@Tags(['golden'])
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-@Tags(['golden'])
 import 'package:kithara/audio/mic_stream.dart';
 import 'package:kithara/theme/kithara_theme.dart';
 import 'package:kithara/tuner/tuner_controller.dart';
