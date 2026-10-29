@@ -5,7 +5,7 @@
 #   - workflow_dispatch (手动): 只构建 + 传 workflow artifact, 不发 Release
 #
 # 说明:
-#   - Flutter 官方 stable + 中国镜像加速（pub/引擎产物）
+#   - Flutter 官方 stable（runner 在海外, 官方源最快; 本地开发才用 CN 镜像）
 #   - Java 21（AGP 8 要求 >=17）
 #   - debug 签名（个人分发足够; 上架另配 keystore 走 secrets）
 #   - 版本号取自 tag（v1.2.3 -> 1.2.3），写入 pubspec version 再构建
@@ -37,14 +37,11 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Set up Flutter (stable, CN mirrors)
+      - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
-        env:
-          PUB_HOSTED_URL: https://pub.flutter-io.cn
-          FLUTTER_STORAGE_BASE_URL: https://storage.flutter-io.cn
 
       - name: Version from tag
         if: github.ref_type == 'tag'
@@ -56,9 +53,6 @@ jobs:
           sed -i "s/^version:.*/version: $V+1/" pubspec.yaml
 
       - name: Pub get
-        env:
-          PUB_HOSTED_URL: https://pub.flutter-io.cn
-          FLUTTER_STORAGE_BASE_URL: https://storage.flutter-io.cn
         run: flutter pub get
 
       - name: Analyze
