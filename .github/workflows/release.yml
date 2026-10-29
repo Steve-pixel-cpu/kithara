@@ -86,6 +86,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # gh 依赖 git 上下文定位仓库，缺 checkout 会报 "not a git repository"
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           name: kithara-apk
@@ -95,7 +98,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
+          # create 加 || true 是幂等考虑（重跑时 release 已存在），
+          # 但不能让它掩盖 setup 失败——下面 upload 退出码即本步骤结果
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
             --title "Kithara ${GITHUB_REF_NAME}" \
             --notes "Kithara 吉他调音器 ${GITHUB_REF_NAME}
 
@@ -104,4 +109,5 @@ jobs:
           - 粘性锁弦、量程自适应仪表、降噪灵敏度可调
           - 深浅双主题（含跟随系统）" \
             || true
-          gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          gh release upload "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" --clobber
