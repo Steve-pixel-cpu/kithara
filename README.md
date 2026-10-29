@@ -72,7 +72,10 @@ flutter build apk --release
 
 APK 输出：`build/app/outputs/flutter-apk/app-release.apk`
 
-App 图标由 `flutter_launcher_icons` 从 `assets/icon/app_icon.png` 生成（Android 自适应图标，白底）：
+App 图标是外部工具处理好的方形成品（`assets/icon/`，深色满铺构图），直接拷入
+`res/mipmap-*/ic_launcher.png` 使用，**不走 adaptive 前景/背景**（方形图套 adaptive
+遮罩会把主体缩进安全区，白底上浮小图标——就是上一版「图标有点奇怪」的根因）。
+若改动 `assets/icon/app_icon.png` 后想重新生成：
 
 ```bash
 dart run flutter_launcher_icons

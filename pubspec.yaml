@@ -50,13 +50,13 @@ dev_dependencies:
   fake_async: ^1.3.3
   flutter_launcher_icons: ^0.14.4
 
-# App 图标生成（Android 专用，本项目不做 iOS）。
-# 用法: dart run flutter_launcher_icons
+# App 图标（Android 专用，本项目不做 iOS）。
+# 图标用外部工具处理好的成品（assets/icon/ 三件套 + 手动拷入 res/mipmap-*），
+# 这里只保留 image_path 兜底，不再配 adaptive（成品方形图自带构图，
+# adaptive 遮罩会把主体缩进 66/108 安全区 → 白底上浮小图标，观感差）。
 flutter_launcher_icons:
   image_path: "assets/icon/app_icon.png"
   android: true
-  adaptive_icon_background: "#FEFEFE" # 图标主图的白底
-  adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"
   # 不配置 ios 字段 → 不生成 iOS 图标
 
 # For information on the generic Dart part of this file, see the
