@@ -62,7 +62,9 @@ void main() {
       await tester.pumpWidget(harness(controller, KitharaTheme.dark));
       await tester.pump(); // 让 _startup async 链（权限→start→setState）落地
       await tester.pump();
-      // 先有信号再丢失 → 音名不能残留
+      // 先有信号再丢失 → 音名不能残留（稳定唤醒 3 帧）
+      controller.onPitch(110.0, 0.95);
+      controller.onPitch(110.0, 0.95);
       controller.onPitch(110.0, 0.95);
       await tester.pump();
       // 环心 + 弦条都是纯 A2（弦号改为点击浮层提示）
@@ -78,7 +80,9 @@ void main() {
     testWidgets('检测中: 环上存在 GlowRing 且 needle 传入', (tester) async {
       final controller = TunerController();
       await tester.pumpWidget(harness(controller, KitharaTheme.dark));
-      controller.onPitch(110.0 * 1.01, 0.95); // +17¢
+      for (var i = 0; i < 3; i++) {
+        controller.onPitch(110.0 * 1.01, 0.95); // +17¢（稳定唤醒 3 帧）
+      }
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200)); // 弹簧运动中
       final ring = tester.widget<GlowRing>(find.byType(GlowRing));
@@ -89,7 +93,9 @@ void main() {
     testWidgets('锁定: ring.locked=true, needle 钉死 0, 引导语为已调准', (tester) async {
       final controller = TunerController();
       await tester.pumpWidget(harness(controller, KitharaTheme.dark));
-      controller.onPitch(110.0 * 1.001, 0.95); // A2 +1.7¢
+      controller.onPitch(110.0 * 1.001, 0.95); // A2 +1.7¢（下面再喂 2 帧）
+      controller.onPitch(110.0 * 1.001, 0.95);
+      controller.onPitch(110.0 * 1.001, 0.95); // 稳定门限 3 帧
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
       final ring = tester.widget<GlowRing>(find.byType(GlowRing));
@@ -103,7 +109,9 @@ void main() {
       await tester.pumpWidget(harness(controller, KitharaTheme.dark));
       await tester.pump();
       await tester.pump();
-      controller.onPitch(110.0 * 1.001, 0.95); // A2 锁定
+      controller.onPitch(110.0 * 1.001, 0.95); // A2 锁定（3 帧稳定唤醒）
+      controller.onPitch(110.0 * 1.001, 0.95);
+      controller.onPitch(110.0 * 1.001, 0.95);
       await tester.pump();
       final ring1 = tester.widget<GlowRing>(find.byType(GlowRing));
       expect(ring1.locked, isTrue);

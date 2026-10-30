@@ -89,8 +89,10 @@ void main() {
       await tester.pumpWidget(harness(controller, KitharaTheme.dark));
       await tester.pump();
       await tester.pump();
-      // A2 -20¢: 接近但未到 ±5¢ → 环心音名黄色（接近态）
-      controller.onPitch(110.0 * math.pow(2, -20 / 1200), 0.95);
+      // A2 -20¢: 接近但未到 ±5¢ → 环心音名黄色（接近态, 稳定唤醒 3 帧）
+      for (var i = 0; i < 3; i++) {
+        controller.onPitch(110.0 * math.pow(2, -20 / 1200), 0.95);
+      }
       await tester.pump();
       final noteText = tester.widget<Text>(find.text('A2').first);
       expect(noteText.style!.color, const Color(0xFFFBBF24)); // warn 黄
@@ -333,13 +335,15 @@ void main() {
       await tester.pumpWidget(harness(controller, KitharaTheme.dark));
       await tester.pump();
       await tester.pump();
-      controller.onPitch(110.0 * 1.001, 0.95); // 锁定 A2
+      controller.onPitch(110.0 * 1.001, 0.95); // 锁定 A2（3 帧稳定唤醒）
+      controller.onPitch(110.0 * 1.001, 0.95);
+      controller.onPitch(110.0 * 1.001, 0.95);
       await tester.pump();
-      // 环心: 纯音名 A2（无弦号、无数字），字号 72 可辨
+      // 环心: 纯音名 A2（无弦号），字号 72 可辨
       final ringNote = tester.widget<Text>(find.text('A2').first);
       expect(ringNote.style!.fontSize, 72); // 环心音名（弦条是 12）
-      // 环心 cents 数字不渲染
-      expect(find.textContaining('¢'), findsNothing);
+      // 环心 cents 数字（2026-10 迭代: 需求改为显示高低偏差数字）: 有信号即渲染
+      expect(find.textContaining('¢'), findsOneWidget);
       // 弦条标签纯音名（弦号改由点击提示浮层展示）
       expect(find.text('E2(6)'), findsNothing);
       // 点击 A2 弦条 → 浮层显示「5弦」
@@ -460,6 +464,156 @@ void main() {
             return true;
           });
       expect(homeState.bridge.noiseGate, 'high');
+    });
+  });
+
+  group('选中弦横线变粗与音分数字', () {
+    /// 弦按钮内的 LED 横线（AnimatedContainer）
+    Finder ledLineOf(String name) => find.descendant(
+          of: find.byKey(Key('led_$name')),
+          matching: find.byType(AnimatedContainer),
+        );
+
+    BoxDecoration ledDeco(WidgetTester tester, String name) =>
+        (tester.widget<AnimatedContainer>(ledLineOf(name)).decoration!
+            as BoxDecoration);
+
+    testWidgets('点击无框效果: 水波纹/高亮透明; 弦名与 LED 横线居中对齐', (tester) async {
+      final controller = TunerController();
+      await tester.pumpWidget(harness(controller, KitharaTheme.dark));
+      await tester.pump();
+      await tester.pump();
+      final ink = tester.widget<InkWell>(
+        find.ancestor(
+          of: find.byKey(const Key('led_D3')),
+          matching: find.byType(InkWell),
+        ).first,
+      );
+      expect(ink.splashColor, Colors.transparent, reason: '点击不画水波纹框');
+      expect(ink.highlightColor, Colors.transparent, reason: '按下不画高亮框');
+      // 弦名文字与 LED 横线水平中心对齐
+      final textRect = tester.getRect(find.text('D3'));
+      final ledRect = tester.getRect(ledLineOf('D3'));
+      expect((textRect.center.dx - ledRect.center.dx).abs(), lessThan(1.0),
+          reason: '文字居中于 LED');
+    });
+
+    testWidgets('触控区: 点击 LED 上方空白区也能选中（命中区 ≥52px 高）', (tester) async {
+      final controller = TunerController();
+      await tester.pumpWidget(harness(controller, KitharaTheme.dark));
+      await tester.pump();
+      await tester.pump();
+      // 弦按钮盒子（led_D3 = _StringBar 根）顶部 8px 处（LED 视觉内容之外的空白）
+      final box = tester.getRect(find.byKey(const Key('led_D3')));
+      await tester.tapAt(Offset(box.center.dx, box.top + 8));
+      await tester.pump();
+      expect(controller.state.activeString?.name, 'D3',
+          reason: '空白区属于命中范围');
+      // 盒子本身 ≥52px 高
+      expect(box.height, greaterThanOrEqualTo(52));
+    });
+
+    testWidgets('选中弦: LED 横线变粗（10→18）+ accent 色 + 辉光，再点取消', (tester) async {
+      final controller = TunerController();
+      await tester.pumpWidget(harness(controller, KitharaTheme.dark));
+      await tester.pump();
+      await tester.pump();
+
+      // 未选中: 高 10、灰色
+      final idle = tester.widget<AnimatedContainer>(ledLineOf('D3'));
+      expect(idle.constraints!.minHeight, 10);
+      expect(ledDeco(tester, 'D3').color, KitharaTheme.dark.surface3);
+
+      // 点 D3 → 变粗 + accent
+      await tester.tap(find.byKey(const Key('led_D3')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      final sel = tester.widget<AnimatedContainer>(ledLineOf('D3'));
+      expect(sel.constraints!.minHeight, 18, reason: '选中变粗');
+      final deco = ledDeco(tester, 'D3');
+      expect(deco.color, KitharaTheme.dark.accent);
+      expect(deco.boxShadow, isNotNull, reason: 'accent 辉光');
+
+      // 再点同一弦 → 取消选择, 回细灰
+      await tester.tap(find.byKey(const Key('led_D3')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(
+        tester.widget<AnimatedContainer>(ledLineOf('D3')).constraints!.minHeight,
+        10,
+      );
+      expect(ledDeco(tester, 'D3').color, KitharaTheme.dark.surface3);
+    });
+
+    testWidgets('选中且调准: LED 变绿色（ok）+ 绿辉光', (tester) async {
+      final controller = TunerController();
+      await tester.pumpWidget(harness(controller, KitharaTheme.dark));
+      await tester.pump();
+      await tester.pump();
+      controller.selectString(-19); // D3
+      for (var i = 0; i < 5; i++) {
+        controller.onPitch(146.83 * 1.001, 0.95);
+      }
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      final deco = ledDeco(tester, 'D3');
+      expect(deco.color, KitharaTheme.dark.ok);
+      expect(tester.widget<AnimatedContainer>(ledLineOf('D3')).constraints!.minHeight, 18);
+      expect(find.text('±0¢'), findsOneWidget);
+    });
+
+    testWidgets('环心音分数字: +30¢ 显示 "+30¢" 黄色, 调准显示 "±0¢" 绿色, 无信号隐藏', (tester) async {
+      final controller = TunerController();
+      await tester.pumpWidget(harness(controller, KitharaTheme.dark));
+      await tester.pump();
+      await tester.pump();
+      // 无信号: 不显示数字
+      expect(find.byKey(const Key('cents_display')), findsNothing);
+
+      controller.selectString(-19); // D3
+      for (var i = 0; i < 5; i++) {
+        controller.onPitch(146.83 * math.pow(2, 30 / 1200), 0.95);
+      }
+      await tester.pump();
+      final centsText =
+          tester.widget<Text>(find.byKey(const Key('cents_display')));
+      expect(centsText.data, '+30¢');
+      expect(centsText.style!.color, const Color(0xFFFBBF24)); // warn 黄
+
+      // 调准（+1.7¢ ∈ ±5¢）: ±0¢ 绿色
+      for (var i = 0; i < 5; i++) {
+        controller.onPitch(146.83 * 1.001, 0.95);
+      }
+      await tester.pump();
+      final tuned = tester.widget<Text>(find.byKey(const Key('cents_display')));
+      expect(tuned.data, '±0¢');
+      expect(tuned.style!.color, const Color(0xFF4ADE80)); // ok 绿
+    });
+
+    testWidgets('引导语带数字: 偏高/偏低显示具体音分（大偏差分支同格式）', (tester) async {
+      final controller = TunerController();
+      await tester.pumpWidget(harness(controller, KitharaTheme.dark));
+      await tester.pump();
+      await tester.pump();
+      controller.selectString(-19); // D3
+      // +30¢
+      for (var i = 0; i < 3; i++) {
+        controller.onPitch(146.83 * math.pow(2, 30 / 1200), 0.95);
+      }
+      await tester.pump();
+      expect(find.textContaining('偏高 30¢'), findsOneWidget);
+      // -30¢
+      for (var i = 0; i < 3; i++) {
+        controller.onPitch(146.83 * math.pow(2, -30 / 1200), 0.95);
+      }
+      await tester.pump();
+      expect(find.textContaining('偏低 30¢'), findsOneWidget);
+      // +80¢（大偏差分支也要带数字）
+      for (var i = 0; i < 3; i++) {
+        controller.onPitch(146.83 * math.pow(2, 80 / 1200), 0.95);
+      }
+      await tester.pump();
+      expect(find.textContaining('偏高 80¢'), findsOneWidget);
     });
   });
 }

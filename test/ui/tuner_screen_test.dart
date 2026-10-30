@@ -24,7 +24,9 @@ void main() {
   testWidgets('onPitch A4+10¢ → 显示 A4, 指针右偏, 非 inTune 色', (tester) async {
     final controller = TunerController();
     await tester.pumpWidget(makeHarness(controller: controller));
-    controller.onPitch(440.0 * 1.0058, 0.95); // +10¢
+    for (var i = 0; i < 3; i++) {
+      controller.onPitch(440.0 * 1.0058, 0.95); // +10¢
+    }
     await tester.pump();
     expect(find.text('A4'), findsOneWidget);
   });
@@ -47,7 +49,9 @@ void main() {
   testWidgets('inTune: ±5¢ 内显示绿色对勾指示', (tester) async {
     final controller = TunerController();
     await tester.pumpWidget(makeHarness(controller: controller));
-    controller.onPitch(110.0 * 1.001, 0.95); // A2 +1.7¢
+    for (var i = 0; i < 3; i++) {
+      controller.onPitch(110.0 * 1.001, 0.95); // A2 +1.7¢
+    }
     await tester.pump();
     expect(find.byKey(const Key('in_tune_indicator')), findsOneWidget);
   });

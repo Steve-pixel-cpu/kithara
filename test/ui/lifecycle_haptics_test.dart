@@ -68,16 +68,16 @@ void main() {
       ),
     ));
     await tester.pump();
-    // 进入 inTune（A2 +1.7¢）
-    controller.onPitch(110.0 * 1.001, 0.95);
-    await tester.pump();
-    controller.onPitch(110.0 * 1.001, 0.95);
+    // 进入 inTune（A2 +1.7¢, 稳定唤醒 3 帧）
+    for (var i = 0; i < 3; i++) {
+      controller.onPitch(110.0 * 1.001, 0.95);
+    }
     await tester.pump();
     expect(haptics.inTunePulses, 1); // 边沿只一次
     // 离开再进入 → 再一次
     controller.onPitch(110.0 * 1.03, 0.95);
     await tester.pump();
-    controller.onPitch(110.0 * 1.001, 0.95);
+    controller.onPitch(110.0 * 1.001, 0.95); // 已唤醒, 直接跟随回 inTune
     await tester.pump();
     expect(haptics.inTunePulses, 2);
   });

@@ -392,20 +392,38 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                           child: child,
                         ),
                         child: s.hasSignal
-                            ? Text(
-                                s.noteLabel,
+                            ? Column(
                                 key: ValueKey(s.noteLabel),
-                                style: TextStyle(
-                                  color: s.inTune
-                                      ? t.ok
-                                      : (s.cents.abs() <= 30
-                                          ? t.warn
-                                          : t.text),
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 72,
-                                  height: 1.0,
-                                  letterSpacing: -2,
-                                ),
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    s.noteLabel,
+                                    style: TextStyle(
+                                      color: s.inTune
+                                          ? t.ok
+                                          : (s.cents.abs() <= 30
+                                              ? t.warn
+                                              : t.text),
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 72,
+                                      height: 1.0,
+                                      letterSpacing: -2,
+                                    ),
+                                  ),
+                                  // 音分数字: +23¢ 偏高(拧松) / -12¢ 偏低(拧紧) / ±0¢ 调准
+                                  Text(
+                                    _centsLabel(s),
+                                    key: const Key('cents_display'),
+                                    style: TextStyle(
+                                      color: _centsColor(s, t),
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures()
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               )
                             : SizedBox(
                                 key: const ValueKey('empty'),
@@ -491,6 +509,10 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
                       Expanded(
                         child: InkWell(
                           borderRadius: BorderRadius.circular(10),
+                          // 大命中区上不画墨水框: 水波纹/高亮透明, 只保留触觉反馈
+                          splashColor: Colors.transparent,
+                          highlightColor: Colors.transparent,
+                          hoverColor: Colors.transparent,
                           onTap: () {
                             widget.haptics?.selectionClick();
                             widget.controller.selectString(st.semitoneIndex);
@@ -532,12 +554,27 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
     });
   }
 
+  /// 环心音分数字: ±0¢ 调准（绿）; 其余带符号（+偏高拧松 / -偏低拧紧）
+  String _centsLabel(TunerState s) {
+    if (s.inTune) return '±0¢';
+    final v = s.cents;
+    final sign = v > 0 ? '+' : (v < 0 ? '-' : '');
+    return '$sign${v.abs().round()}¢';
+  }
+
+  /// 音分数字颜色: 调准绿 / 近（≤30¢）黄 / 远中性
+  Color _centsColor(TunerState s, KitharaTheme t) {
+    if (s.inTune) return t.ok;
+    if (s.hasSignal && s.cents.abs() <= 30) return t.warn;
+    return t.text2;
+  }
+
   /// 状态引导语：告诉用户下一步做什么，替代"未检测到信号"。
   String _guidance(TunerState s) {
     // 大偏差（粘性锁下弦很松）: 按符号给方向——cents<0 音低拧紧, cents>0 音高拧松
     if (s.hasSignal && s.activeString != null && s.cents.abs() > 50) {
-      final dir = s.cents < 0 ? '拧紧' : '拧松';
-      return '向 ${s.activeString!.name} $dir…（差 ${s.cents.abs().toStringAsFixed(0)}¢）';
+      final dir = s.cents < 0 ? '偏低' : '偏高';
+      return '$dir ${s.cents.abs().round()}¢，向 ${s.activeString!.name} ${s.cents < 0 ? '拧紧' : '拧松'}…';
     }
     if (s.mode.semitones.isEmpty) {
       // 半音阶：无目标弦
@@ -545,8 +582,10 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
       if (s.inTune) return '✓ ${s.noteLabel} 已调准';
       // cents>0 = 检测音高于目标 = 偏高要拧松; cents<0 = 偏低要拧紧
       return s.cents > 15
-          ? '偏高，向 ${s.noteLabel} 拧松'
-          : (s.cents < -15 ? '偏低，向 ${s.noteLabel} 拧紧' : '微调…');
+          ? '偏高 ${s.cents.abs().round()}¢，向 ${s.noteLabel} 拧松'
+          : (s.cents < -15
+              ? '偏低 ${s.cents.abs().round()}¢，向 ${s.noteLabel} 拧紧'
+              : '微调…');
     }
     final target = s.activeString;
     if (!s.hasSignal) {
@@ -554,9 +593,10 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
     }
     if (s.inTune && target != null) return '✓ ${target.name} 已调准';
     if (target == null) return '音高偏离各弦，继续调整';
+    final centsPart = s.cents.abs().round();
     return s.cents > 8
-        ? '偏高，向 ${target.name} 拧松…'
-        : (s.cents < -8 ? '偏低，向 ${target.name} 拧紧…' : '微调…');
+        ? '偏高 $centsPart¢，向 ${target.name} 拧松…'
+        : (s.cents < -8 ? '偏低 $centsPart¢，向 ${target.name} 拧紧…' : '微调…');
   }
 
   String _gateLabel(String gate) => switch (gate) {
@@ -776,43 +816,58 @@ class _StringBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // LED 四态: inTune 亮绿+辉光 > tuned 持久淡绿 > active 亮白 > 灰
+    // LED 四态: inTune 亮绿+辉光 > tuned 持久淡绿 > selected accent+辉光 > 灰
+    // 选中表达 = 横线本身变粗（10→18）+ 变色 + 辉光; 调准绿优先。
+    final selected = active;
+    final ledOk = selected && (inTune || tuned);
     final ledColor = inTune
         ? t.ok
         : (tuned
             ? t.ok.withValues(alpha: 0.45)
-            : (active ? t.text : t.surface3));
-    return Column(
-      children: [
-        Container(
-          height: 10,
+            : (selected ? (ledOk ? t.ok : t.accent) : t.surface3));
+    final glowColor = ledOk ? t.ok : t.accent;
+    final labelColor = inTune || tuned
+        ? t.ok
+        : (selected ? (ledOk ? t.ok : t.accent) : t.text3);
+    // 命中区 ≥52px（无障碍标准）: 空白向上延伸, 内容 bottom 对齐视觉不变
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 52),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          height: selected ? 18 : 10,
           margin: const EdgeInsets.symmetric(horizontal: 6),
+          alignment: Alignment.bottomCenter,
           decoration: BoxDecoration(
             color: ledColor,
-            borderRadius: BorderRadius.circular(5),
+            borderRadius: BorderRadius.circular(9),
             boxShadow: inTune
                 ? [BoxShadow(color: t.ok.withValues(alpha: 0.45), blurRadius: 10)]
                 : (tuned
                     ? [BoxShadow(color: t.ok.withValues(alpha: 0.18), blurRadius: 5)]
-                    : (active
-                        ? [BoxShadow(color: t.text.withValues(alpha: 0.25), blurRadius: 6)]
+                    : (selected
+                        ? [BoxShadow(color: glowColor.withValues(alpha: 0.35), blurRadius: 8)]
                         : null)),
           ),
         ),
         const SizedBox(height: 6),
         Text(
           target.name,
+          textAlign: TextAlign.center,
           style: TextStyle(
-            color: inTune || tuned
-                ? t.ok
-                : (active ? t.text : t.text3),
+            color: labelColor,
             fontSize: 12,
             fontFeatures: const [FontFeature.tabularFigures()],
-            fontWeight:
-                active || inTune || tuned ? FontWeight.w600 : FontWeight.w400,
+            fontWeight: selected || inTune || tuned
+                ? FontWeight.w600
+                : FontWeight.w400,
           ),
         ),
-      ],
+        ],
+      ),
     );
   }
 }

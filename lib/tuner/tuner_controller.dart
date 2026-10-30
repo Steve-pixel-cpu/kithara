@@ -62,10 +62,26 @@ class TunerController extends ChangeNotifier {
   int? _noteSemi; // 当前显示音名的半音索引
   int? _noteCandidateSemi; // 挂起中的新音名（需第 2 帧确认）
   bool _manualLock = false; // 手动选弦粘性锁（自动匹配不覆盖）
+  bool _hasSignalWoken = false; // 稳定门限: 是否已通过稳定唤醒
+
+  /// 稳定门限复位（信号丢失/低置信帧）
+  void _resetWake() {
+    _wakeCount = 0;
+    _wakeAnchor = null;
+    _hasSignalWoken = false;
+  }
 
   // 3 帧中值滤波: 松弦时检测帧间乱跳（真实物理现象——低张力弦谐波失谐）,
   // 中位数天然免疫单帧毛刺, 比均值平滑不拖慢正常跟弦
   final List<double> _freqWindow = [];
+
+  // 稳定门限（拒非乐器声）: 唤醒需连续 3 帧音高落在同一 40¢ 带内。
+  // 人声/环境声音高持续滑动或音节 <300ms → 唤不醒；拨弦持续数秒 → 正常锁定。
+  // 仅自动模式设卡；手动锁弦用户意图明确，保持即时反馈（毛刺由中值滤波兜底）。
+  static const _wakeFrames = 3;
+  static const _wakeBand = 40.0;
+  int _wakeCount = 0;
+  double? _wakeAnchor;
 
   // 量程自适应: 滞回扩档（扩档阈值 95%/缩档 75% 防边界抖动）
   int _range = 50;
@@ -119,6 +135,7 @@ class TunerController extends ChangeNotifier {
   void onPitch(double? freq, double confidence) {
     if (freq == null) {
       _hasSignal = false; // noteLabel/cents/active 保留，UI 平滑
+      _resetWake();
       // 锁定保持窗口：已调准状态下信号消失，保持绿色 2s（needle 保持居中）
       final wasTuned = _active != null && _cents.abs() <= 5.0;
       final holding = wasTuned ||
@@ -134,15 +151,18 @@ class TunerController extends ChangeNotifier {
       return;
     }
     final hadSignal = _hasSignal;
-    _hasSignal = confidence >= (hadSignal ? _confHold : _confOn);
+    // 稳定门限: 已唤醒/手动锁弦/已有信号 → 维持门限 0.75; 否则触发门限 0.85
+    final holdMode = _hasSignalWoken || _manualLock || hadSignal;
+    _hasSignal = false; // 先置否, 通过稳定门限后再置真
     // 中值滤波: 维护最近 3 帧频率, 取中位（仅用于 cents/needle 显示平滑；
     // 音名滞回与弦锁定用原始帧——随机毛刺不会连续 2 帧同值, 滞回本就免疫）
     _freqWindow.add(freq);
     if (_freqWindow.length > 3) _freqWindow.removeAt(0);
     final sorted = [..._freqWindow]..sort();
     final smoothed = sorted[sorted.length ~/ 2];
-    if (!_hasSignal) {
-      // 未达门限：走无信号路径（保持窗口仍生效）
+    if (confidence < (holdMode ? _confHold : _confOn)) {
+      // 未达置信门限：走无信号路径（保持窗口仍生效）
+      _resetWake();
       final wasTuned = _active != null && _cents.abs() <= 5.0;
       if (wasTuned) {
         _lockHoldUntil = _now().add(_lockHoldDuration);
@@ -150,6 +170,24 @@ class TunerController extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    // 稳定门限: 已唤醒（或手动锁弦）→ 直接过卡正常跟随；
+    // 未唤醒 → 需连续 3 帧落在同一 40¢ 带内才允许唤醒（拒说话/环境声）。
+    if (!_hasSignalWoken && !_manualLock) {
+      final anchor = _wakeAnchor;
+      final inBand = anchor != null &&
+          (1200.0 * math.log(freq / anchor) / math.ln2).abs() <= _wakeBand;
+      _wakeCount = inBand ? _wakeCount + 1 : 1;
+      _wakeAnchor = freq;
+      if (_wakeCount < _wakeFrames) {
+        // 未达唤醒帧数: 不更新任何显示状态（对 UI 等同无信号）
+        notifyListeners();
+        return;
+      }
+      _hasSignalWoken = true;
+    } else {
+      _wakeAnchor = freq;
+    }
+    _hasSignal = true;
     // 新信号到来 → 结束保持窗口，回到实时判定
     _lockHoldUntil = null;
     _noteLabel = _mapper.noteName(_mapper.nearestSemitoneIndex(freq));
@@ -279,6 +317,7 @@ class TunerController extends ChangeNotifier {
     if (_active?.semitoneIndex == semitoneIndex) {
       _active = null;
       _manualLock = false;
+      _resetWake(); // 解锁回自动模式 → 重新走稳定门限
     } else {
       _active = StringTarget(semitoneIndex, _a4);
       _pending = null;
@@ -299,6 +338,7 @@ class TunerController extends ChangeNotifier {
     _noteSemi = null;
     _noteCandidateSemi = null;
     _manualLock = false;
+    _resetWake();
     _tunedSemis.clear();
     notifyListeners();
   }

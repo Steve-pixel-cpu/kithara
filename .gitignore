@@ -3,3 +3,13 @@
 android/.kotlin/
 build/
 test/ui/goldens/
+test/ui/failures/
+
+# 实验脚本与测试样本（不进库）
+__pycache__/
+extracted/
+guitar_samples/
+mgt.zip
+accuracy_sim.py
+compare_mgt.py
+compare_mgt2.py

@@ -31,6 +31,10 @@ void main() {
     final f = 82.41 * math.pow(2, -50 / 1200);
     rb.write(synth(f));
     pipeline.tick();
+    rb.write(synth(f));
+    pipeline.tick();
+    rb.write(synth(f));
+    pipeline.tick();
     expect(controller.state.noteLabel, 'E2');
     expect(controller.state.cents, closeTo(-50, 3), reason: 'cents=${controller.state.cents}');
     // -50¢ 触发滞回扩档到 ±250, needle = -50/250 = -0.2（量程自适应后
@@ -55,6 +59,10 @@ void main() {
     controller.setMode(dropD);
     rb.write(synth(110.0));
     pipeline.tick();
+    rb.write(synth(110.0));
+    pipeline.tick();
+    rb.write(synth(110.0));
+    pipeline.tick();
     expect(controller.state.noteLabel, 'A2');
 
     // 切到 ukulele → 桥按声明重建
@@ -66,6 +74,10 @@ void main() {
       detector: detector,
       controller: controller,
     );
+    rb.write(synth(392.0));
+    pipeline2.tick();
+    rb.write(synth(392.0));
+    pipeline2.tick();
     rb.write(synth(392.0));
     pipeline2.tick();
     expect(controller.state.noteLabel, 'G4');
@@ -84,6 +96,10 @@ void main() {
 
     rb.write(synth(110.0));
     pipeline.tick();
+    rb.write(synth(110.0));
+    pipeline.tick();
+    rb.write(synth(110.0));
+    pipeline.tick();
 
     final s = controller.state;
     expect(s.hasSignal, isTrue);
@@ -92,7 +108,6 @@ void main() {
     expect(s.activeString!.name, 'A2');
     expect(s.inTune, isTrue);
   });
-
   test('端到端: 静音帧 → hasSignal=false, noteLabel 保留', () {
     final rb = RingBuffer(8192);
     final controller = TunerController();
@@ -102,6 +117,10 @@ void main() {
       controller: controller,
     );
 
+    rb.write(synth(110.0));
+    pipeline.tick();
+    rb.write(synth(110.0));
+    pipeline.tick();
     rb.write(synth(110.0));
     pipeline.tick();
     // 全零帧
@@ -135,6 +154,8 @@ void main() {
     );
     controller.setMode(TuningModes.byId('drop_d'));
 
+    rb.write(synth(73.42));
+    pipeline.tick();
     rb.write(synth(73.42));
     pipeline.tick();
     rb.write(synth(73.42));

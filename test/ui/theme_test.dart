@@ -83,6 +83,8 @@ void main() {
       final scaffold = tester.widget<Scaffold>(find.byType(Scaffold).first);
       expect(scaffold.backgroundColor, const Color(0xFF0A0A0D)); // OLED 纯黑
       controller.onPitch(110.0 * 1.02, 0.95); // 非 inTune, 音名白
+      controller.onPitch(110.0 * 1.02, 0.95);
+      controller.onPitch(110.0 * 1.02, 0.95); // 稳定唤醒 3 帧
       await tester.pump();
       final noteStyle = tester.widget<Text>(find.text('A2').first).style;
       expect(noteStyle!.color, const Color(0xFFECECF1));
@@ -95,7 +97,9 @@ void main() {
       await tester.pump();
       final scaffold = tester.widget<Scaffold>(find.byType(Scaffold).first);
       expect(scaffold.backgroundColor, const Color(0xFFFCFCFD));
-      controller.onPitch(110.0 * 1.02, 0.95); // 非 inTune
+      controller.onPitch(110.0 * 1.02, 0.95); // 非 inTune（稳定唤醒 3 帧）
+      controller.onPitch(110.0 * 1.02, 0.95);
+      controller.onPitch(110.0 * 1.02, 0.95);
       await tester.pump();
       final noteStyle = tester.widget<Text>(find.text('A2').first).style;
       expect(noteStyle!.color, const Color(0xFF1D1D22));
@@ -105,7 +109,9 @@ void main() {
         (tester) async {
       final controller = TunerController();
       await tester.pumpWidget(harness(Brightness.dark, controller: controller));
-      controller.onPitch(110.0 * 1.001, 0.95);
+      for (var i = 0; i < 3; i++) {
+        controller.onPitch(110.0 * 1.001, 0.95); // 稳定唤醒
+      }
       await tester.pump();
       // inTune 环心音名用 ok 色
       final darkNote = tester.widget<Text>(find.text('A2').first);
@@ -113,7 +119,9 @@ void main() {
 
       await tester.pumpWidget(harness(Brightness.light, controller: controller));
       await tester.pump();
-      controller.onPitch(110.0 * 1.001, 0.95);
+      for (var i = 0; i < 3; i++) {
+        controller.onPitch(110.0 * 1.001, 0.95); // 稳定唤醒
+      }
       await tester.pump();
       final lightNote = tester.widget<Text>(find.text('A2').first);
       expect(lightNote.style!.color, const Color(0xFF17803B));
