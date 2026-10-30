@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: ^3.13.7
@@ -51,12 +51,16 @@ dev_dependencies:
   flutter_launcher_icons: ^0.14.4
 
 # App 图标（Android 专用，本项目不做 iOS）。
-# 图标用外部工具处理好的成品（assets/icon/ 三件套 + 手动拷入 res/mipmap-*），
-# 这里只保留 image_path 兜底，不再配 adaptive（成品方形图自带构图，
-# adaptive 遮罩会把主体缩进 66/108 安全区 → 白底上浮小图标，观感差）。
+# adaptive 双层：背景层铺满画布（任何蒙版下无白边），
+# 前景层的深色卡片已预缩到 82.6%（logo 恰好落在 66dp 安全区圆内），
+# 因此 inset 必须为 0，否则会二次缩小。API 26+ 走 adaptive，
+# API 24/25 用 image_path 的满幅深色图兜底。
 flutter_launcher_icons:
   image_path: "assets/icon/app_icon.png"
   android: true
+  adaptive_icon_background: "assets/icon/app_icon_background.png"
+  adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"
+  adaptive_icon_foreground_inset: 0
   # 不配置 ios 字段 → 不生成 iOS 图标
 
 # For information on the generic Dart part of this file, see the
