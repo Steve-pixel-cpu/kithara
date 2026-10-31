@@ -312,6 +312,51 @@ void main() {
     expect(controller.state.hasSignal, isTrue, reason: '稳定 3 帧唤醒');
   });
 
+  // ---------- 2026-10 不对称弦锁 ----------
+
+  test('不对称锁: 低置信不捕获新弦（首次锁定需高置信）', () {
+    final c = TunerController();
+    c.captureConfidence = 0.90; // 严格档
+    // 帧序列：A2 频率，置信度 0.86（>信号触发 0.85，<捕获 0.90）
+    for (var i = 0; i < 5; i++) {
+      c.onPitch(110.0, 0.86);
+    }
+    // 唤醒照常（信号滞回门限 0.85→0.75 已过），但弦锁被捕获门拦下
+    expect(c.state.hasSignal, isTrue, reason: '信号层滞回不受弦锁门限影响');
+    expect(c.state.activeString, isNull, reason: '低置信帧不得捕获新弦');
+  });
+
+  test('不对称锁: 高置信正常捕获', () {
+    final c = TunerController();
+    c.captureConfidence = 0.90;
+    for (var i = 0; i < 3; i++) {
+      c.onPitch(110.0, 0.95);
+    }
+    expect(c.state.activeString, isNotNull);
+    expect(c.state.activeString!.semitoneIndex, -24); // A2（相对 A4 的半音数）
+  });
+
+  test('不对称锁: 已锁定的弦在低置信帧不失锁（低置信只能续不能抢）', () {
+    final c = TunerController();
+    c.captureConfidence = 0.90;
+    for (var i = 0; i < 3; i++) {
+      c.onPitch(110.0, 0.95);
+    }
+    expect(c.state.activeString!.semitoneIndex, -24);
+    // 低置信同弦帧：维持
+    c.onPitch(110.5, 0.76);
+    expect(c.state.activeString!.semitoneIndex, -24, reason: '同弦续锁宽松');
+    // 低置信异弦帧（换弦企图）：不换锁（0.86 过信号门 0.85，不过捕获门 0.90）
+    c.onPitch(146.83, 0.86); // D3
+    c.onPitch(146.83, 0.86);
+    expect(c.state.activeString!.semitoneIndex, -24,
+        reason: '低置信帧不得换弦（连续 2 帧防抖也被门限拦住）');
+    // 高置信异弦帧：正常换弦（2 帧防抖后）
+    c.onPitch(146.83, 0.95);
+    c.onPitch(146.83, 0.95);
+    expect(c.state.activeString!.semitoneIndex, -19, reason: '高置信允许换弦');
+  });
+
   test('setMode: 清锁弦计数, activeString 重置', () {
     for (var i = 0; i < 3; i++) {
       controller.onPitch(110.0, 0.95);

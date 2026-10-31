@@ -14,11 +14,14 @@ class PitchDetector {
     this.minFreq = 65.0,
     this.maxFreq = 350.0,
     this.rmsGate = 0.0,
+    this.confidenceGate = 0.85,
+    this.bandRatioGate = 0.10,
   })  : _fftSize = window * 2, // 零填充一倍：循环自相关在 lag<window 内 == 线性自相关
         _fft = FFT(window * 2),
         _re = Float64List(window * 2),
         _im = Float64List(window * 2),
-        _sqCum = Float64List(window + 1) {
+        _sqCum = Float64List(window + 1),
+        _lpAlpha = 1.0 - math.exp(-2.0 * math.pi * _lpCutoffHz / sampleRate) {
     maxLag = (sampleRate / minFreq).ceil();
     _nsdf = Float64List(maxLag + 1);
   }
@@ -30,7 +33,28 @@ class PitchDetector {
 
   /// 输入级 RMS 门限（0=关闭）。低于门限的帧直接判无信号，
   /// 连 NSDF 都不计算——挡环境底噪/远场噪声，还省电。
+  /// 计量在【前置滤波后】的信号上进行（见 detect 第 0 步）。
   final double rmsGate;
+
+  /// NSDF 置信门限（默认 0.85）。嘈杂模式降到 0.70：拨弦瞬间帧
+  /// 实测置信中位 1.26+（0dB 风扇），0.85 拦不住它们；真机"静默"
+  /// 的根因在控制器凑不齐 3 帧一致，不在检测器。放宽门限放行
+  /// 拨弦帧，噪声帧由 OnsetGate 时间门拦截（仿真：0dB 风扇下
+  /// 每次拨弦命中率 49/20、精度 28¢）。
+  final double confidenceGate;
+
+  /// 频段能量占比门限（默认 0.10）。嘈杂模式降到 0.06：风扇能量
+  /// 落在吉他频段内，摊薄琴的占比。
+  final double bandRatioGate;
+
+  /// 前置低通截止频率。手机麦/AGC 常带高频嘶声与量化噪声，它们不掩蔽
+  /// 吉他基频却会污染自相关包络、并虚增原始 RMS（旧实现门控因此"三档
+  /// 无感"）。两级 one-pole 级联（-12dB/oct）在 1800Hz 衰减带外成分，
+  /// E4 的 4 次谐波（1319Hz）仍在带内不受影响。fc 下限受 1.2·maxFreq
+  /// 频段预检上边界的约束（需 maxFreq·1.2·2.2 < fc·2 才不误伤带内能量）。
+  static const _lpCutoffHz = 1800.0;
+  final double _lpAlpha;
+
 
   late final int maxLag;
 
@@ -49,27 +73,34 @@ class PitchDetector {
     assert(frame.length == window);
     final n = window;
 
-    // 0. RMS 门控（降噪第一道闸：环境底噪直接拒绝，省掉整个 FFT）
-    if (rmsGate > 0) {
-      var sumSq = 0.0;
-      for (var i = 0; i < n; i++) {
-        sumSq += frame[i] * frame[i];
-      }
-      final rms = math.sqrt(sumSq / n);
-      if (rms < rmsGate) {
-        _confidence = 0.0;
-        return null;
-      }
-    }
-
-    // 1. 去直流
+    // 0. 前置滤波（弦外验证过的廉价清理链）+ 滤波后 RMS 门控。
+    //    a）去直流（均值减除）；b）两级 one-pole 低通 @1800Hz。
+    //    帧内独立滤波、无跨帧状态——与环形缓冲"读后耗尽"语义及
+    //    换档重建检测器均兼容。RMS 在滤波后信号上计量：嘶声/直流
+    //    不再虚增门控读数，三档才有真实区分度（旧行为在原始帧上
+    //    计量，嘈杂环境里"琴+噪"总响度轻松过门，档位形同虚设）。
+    //    a,b 两级滤波的暂态（首 ~5ms）由 4096 样本窗的长度稀释。
     var mean = 0.0;
     for (var i = 0; i < n; i++) {
       mean += frame[i];
     }
     mean /= n;
+    var lp1 = 0.0;
+    var lp2 = 0.0;
+    var sumSq = 0.0;
     for (var i = 0; i < n; i++) {
-      _re[i] = frame[i] - mean;
+      final dc = frame[i] - mean;
+      lp1 += _lpAlpha * (dc - lp1);
+      lp2 += _lpAlpha * (lp1 - lp2);
+      _re[i] = lp2;
+      sumSq += lp2 * lp2;
+    }
+    if (rmsGate > 0) {
+      final rms = math.sqrt(sumSq / n);
+      if (rms < rmsGate) {
+        _confidence = 0.0;
+        return null;
+      }
     }
     _re.fillRange(n, _fftSize, 0.0); // 零填充后半段
     _im.fillRange(0, _fftSize, 0.0);
@@ -94,8 +125,8 @@ class PitchDetector {
       total += mag;
       if (k >= kMin && k <= kMax) inBand += mag;
     }
-    // 频段能量占比 < 10% → 基频在范围外，拒绝
-    if (total > 0 && inBand / total < 0.10) {
+    // 频段能量占比过低 → 基频在范围外，拒绝
+    if (total > 0 && inBand / total < bandRatioGate) {
       _confidence = 0.0;
       return null;
     }
@@ -154,7 +185,7 @@ class PitchDetector {
     }
 
     _confidence = _nsdf[bestLag];
-    if (_confidence < 0.85) return null;
+    if (_confidence < confidenceGate) return null;
 
     // 7. 抛物线插值 lag → 亚采样精度
     final y0 = _nsdf[bestLag - 1], y1 = _nsdf[bestLag], y2 = _nsdf[bestLag + 1];

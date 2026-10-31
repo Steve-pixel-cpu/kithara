@@ -75,13 +75,19 @@ class TunerController extends ChangeNotifier {
   // 中位数天然免疫单帧毛刺, 比均值平滑不拖慢正常跟弦
   final List<double> _freqWindow = [];
 
-  // 稳定门限（拒非乐器声）: 唤醒需连续 3 帧音高落在同一 40¢ 带内。
+  // 稳定门限（拒非乐器声）: 唤醒需连续 N 帧音高落在同一 40¢ 带内。
   // 人声/环境声音高持续滑动或音节 <300ms → 唤不醒；拨弦持续数秒 → 正常锁定。
   // 仅自动模式设卡；手动锁弦用户意图明确，保持即时反馈（毛刺由中值滤波兜底）。
-  static const _wakeFrames = 3;
+  // 默认 3 帧；嘈杂模式降至 2 帧（OnsetGate 窗口只有 ~8 帧@20Hz，
+  // 拨弦瞬间窗口短暂，3 帧太苛刻——真机"没反应"的拼图之一）。
+  static const _wakeFramesDefault = 3;
   static const _wakeBand = 40.0;
+  int _wakeFrames = _wakeFramesDefault;
   int _wakeCount = 0;
   double? _wakeAnchor;
+
+  /// 嘈杂模式开关：唤醒帧数 3→2。由管线在设置变更时注入。
+  set wakeFrames(int v) => _wakeFrames = v;
 
   // 量程自适应: 滞回扩档（扩档阈值 95%/缩档 75% 防边界抖动）
   int _range = 50;
@@ -100,8 +106,25 @@ class TunerController extends ChangeNotifier {
 
   /// 信号滞回：触发检出需 0.85（防噪声误报），维持检出只需 0.75
   /// （防门限边缘抖动导致音名闪烁）。上帧有信号时用低门限判断。
-  static const _confOn = 0.85;
+  static const _confOnDefault = 0.85;
   static const _confHold = 0.75;
+  double _confOn = _confOnDefault;
+
+  /// 不对称弦锁：捕获/换弦需更高置信（默认 0.85），同弦续锁沿用
+  /// _confHold（0.75）。已锁定的音允许在噪声抖动中维持——低置信
+  /// 只能"续"不能"抢"。由降噪档位动态设定（main.dart 桥注入，
+  /// low/medium/high = 0.80/0.85/0.90），未注入时与 _confOn 一致。
+  double _captureConfidence = 0.85;
+
+  set captureConfidence(double v) => _captureConfidence = v;
+
+  /// 信号触发门限（平时 0.85）。嘈杂模式下管线降到 0.75：检测器已放宽到
+  /// 0.70, 若控制器仍卡 0.85, 放出来的 0.70-0.85 帧转头就被拒——这正是
+  /// "开不开启差别不大"的接线缺口。时间门(onset)已挡噪声帧, 这里可放宽。
+  set confOn(double v) => _confOn = v;
+
+  /// 实时诊断（嘈杂模式排障用, 由管线每帧写入, UI 直接展示）
+  String diagnostics = '';
 
   @visibleForTesting
   set nowForTest(DateTime Function() f) => _now = f;
@@ -237,6 +260,15 @@ class TunerController extends ChangeNotifier {
         _active = null;
         _pending = null;
         _pendingCount = 0;
+      } else if (confidence < _captureConfidence &&
+          (_active == null ||
+              match.string.semitoneIndex != _active!.semitoneIndex)) {
+        // 不对称弦锁：首次捕获/换弦需高置信；低置信帧只允许维持
+        // 当前锁（同弦续锁走 _applyStringLock）——嘈杂环境里带内噪声
+        // 偶发的假信号被拦在门外，已锁定的读数不受影响（松弦换弦时
+        // 频率大幅远离 → match==null 路径快速释放，不经过此门）。
+        _pending = null;
+        _pendingCount = 0;
       } else {
         _applyStringLock(match);
       }
@@ -284,6 +316,8 @@ class TunerController extends ChangeNotifier {
   }
 
   /// 锁弦：同一根新弦连续 2 帧才切换，防止边界抖动（spec §5）。
+  /// 首次捕获（_active == null）由 onPitch 的不对称门限把关
+  /// （confidence ≥ _captureConfidence 才走到这里）。
   void _applyStringLock(StringMatch match) {
     final target = match.string;
     if (_active == null) {

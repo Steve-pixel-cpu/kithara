@@ -143,4 +143,45 @@ void main() {
     expect(out, isNotNull);
     expect(out!, closeTo(500.0, 1.0));
   });
+// ---------- 2026-10 前置滤波 + 滤波后 RMS 门控 ----------
+
+/// 带限高频嘶声（3-10kHz），吉他会遇到的手机麦/AGC 常见染色。
+Float32List synthHiss(double amp) {
+  // 带内正弦叠加近似带限噪声（3-10kHz，28 个分量）
+  final buf = Float32List(4096);
+  for (var i = 0; i < 4096; i++) {
+    var v = 0.0;
+    for (var f = 3000; f <= 10000; f += 250) {
+      v += math.sin(2 * math.pi * f * i / sr + (f % 997) * 0.37);
+    }
+    buf[i] = v / 28.0 * amp;
+  }
+  return buf;
+}
+
+test('前置滤波: 高频嘶声被滤波后 RMS 门控拦下（旧原始 RMS 会被虚增放行）', () {
+  final gated = PitchDetector(minFreq: 65, maxFreq: 350, rmsGate: 0.008);
+  final hiss = synthHiss(0.5); // 峰值 0.5 的嘶声，旧实现原始 RMS >> 0.008 放行
+  expect(gated.detect(hiss), isNull);
+  expect(gated.lastConfidence, 0.0);
+});
+
+test('前置滤波: 干净琴音不受低通影响（E2 基频 + 泛音全在带内）', () {
+  expect(det.detect(synth(82.41)), isNotNull);
+  expect(det.detect(synth(110.0)), isNotNull);
+  expect(det.detect(synth(329.63)), isNotNull); // E4 基频在带内
+  // E4 的 4 次谐波 1319Hz 仍在 1800Hz 低通带内，检测结果不变
+});
+
+test('滤波后 RMS 计量: 直流偏置不再虚增门控读数', () {
+  final gated = PitchDetector(minFreq: 65, maxFreq: 350, rmsGate: 0.02);
+  // 极弱信号 + 大直流偏置：旧实现在原始帧上算 RMS（被直流抬高）会放行，
+  // 新实现在去直流+低通后计量 → 正确拒绝
+  final weak = synth(110.0);
+  for (var i = 0; i < weak.length; i++) {
+    weak[i] = weak[i] * 0.03 + 0.2; // 信号 RMS ~0.008 但原始 RMS ~0.2
+  }
+  expect(gated.detect(weak), isNull);
+});
+
 }

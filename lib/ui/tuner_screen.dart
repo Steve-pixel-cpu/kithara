@@ -21,9 +21,9 @@ class TunerScreen extends StatefulWidget {
     this.haptics,
     this.theme = KitharaTheme.dark,
     this.themeMode = 'dark',
-    this.noiseGate = 'medium',
+    this.noisyMode = false,
     this.onThemeToggle,
-    this.onNoiseGateChanged,
+    this.onNoisyModeChanged,
     this.onSelectString,
   });
 
@@ -41,9 +41,9 @@ class TunerScreen extends StatefulWidget {
   /// 主题模式：'system' 跟随系统亮度（覆盖 theme 字段），'light'/'dark' 固定。
   final String themeMode;
 
-  /// 降噪档位 'low' | 'medium' | 'high'（显示 + 修改回调）
-  final String noiseGate;
-  final ValueChanged<String>? onNoiseGateChanged;
+  /// 嘈杂环境调音开关（显示 + 修改回调）
+  final bool noisyMode;
+  final ValueChanged<bool>? onNoisyModeChanged;
 
   /// 主题切换回调（主题所有权在装配层/外部）。
   final VoidCallback? onThemeToggle;
@@ -599,80 +599,11 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
         : (s.cents < -8 ? '偏低 $centsPart¢，向 ${target.name} 拧紧…' : '微调…');
   }
 
-  String _gateLabel(String gate) => switch (gate) {
-        'low' => '宽松（安静房间）',
-        'high' => '严格（嘈杂环境）',
-        _ => '标准（日常）',
-      };
-
-  /// 圆角下拉选择器：选项列表也是圆角容器+圆角高亮，风格与弹窗一致。
-  /// [current] 为当前选中档位——弹窗 route 不随父重建，必须显式传入而非读 widget。
-  Future<String?> _showGatePicker(BuildContext ctx, KitharaTheme t, String current) {
-    return showModalBottomSheet<String>(
-      context: ctx,
-      backgroundColor: t.popBg,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetCtx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8, left: 4),
-                child: Text('降噪灵敏度',
-                    style: TextStyle(color: t.text2, fontSize: 13)),
-              ),
-              for (final (label, val) in [
-                ('宽松（安静房间）', 'low'),
-                ('标准（日常）', 'medium'),
-                ('严格（嘈杂环境）', 'high'),
-              ])
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () {
-                      widget.haptics?.selectionClick();
-                      Navigator.pop(sheetCtx, val);
-                    },
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 14),
-                      decoration: BoxDecoration(
-                        // 选中态同弦号胶囊/LED 淡绿系（okSoft 底 + ok 描边）
-                        color: current == val ? t.okSoft : Colors.transparent,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: current == val ? t.ok : Colors.transparent,
-                        ),
-                      ),
-                      child: Text(label,
-                          style: TextStyle(
-                            color: current == val ? t.ok : t.text2,
-                            fontWeight:
-                                current == val ? FontWeight.w600 : FontWeight.w400,
-                          )),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   void _showSettingsDialog(BuildContext context) {
     final t = widget.theme;
-    // 弹窗是 Navigator 独立 overlay route，builder 只在弹出时执行一次，
-    // 父层 setState 不会传播进来——档位用局部变量 + StatefulBuilder 自持状态，
-    // 选档后立即刷新触发器文本，不必关掉重开。
-    String gate = widget.noiseGate;
+    // 弹窗是 Navigator 独立 overlay route；开关值读 widget（父 setState
+    // 已实时下行），StatefulBuilder 仅用于 onChanged 后刷新弹窗。
     showDialog<void>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -683,41 +614,41 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('降噪灵敏度', style: TextStyle(color: t.text2, fontSize: 14)),
-            const SizedBox(height: 8),
-            // 自绘下拉触发器（圆角容器，与弹窗风格统一）
-            InkWell(
-              key: const Key('noise_gate_dropdown'),
-              borderRadius: BorderRadius.circular(12),
-              onTap: () async {
-                widget.haptics?.selectionClick();
-                final picked = await _showGatePicker(ctx, t, gate);
-                if (picked != null && picked != gate) {
-                  setDialogState(() => gate = picked);
-                  widget.onNoiseGateChanged?.call(picked);
-                }
-              },
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 12),
-                decoration: BoxDecoration(
-                  color: t.surface2,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: t.borderStrong),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _gateLabel(gate),
-                        style: TextStyle(color: t.text, fontSize: 15),
-                      ),
-                    ),
-                    Icon(Icons.expand_more, color: t.text3, size: 20),
-                  ],
-                ),
+            // 嘈杂模式实时诊断（真机排障: 打开设置即可读链路各层状态）
+            if (widget.noisyMode && widget.controller.diagnostics.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text(widget.controller.diagnostics,
+                    key: const Key('noisy_diagnostics'),
+                    style: TextStyle(color: t.text3, fontSize: 10)),
               ),
+            // 嘈杂环境调音开关（2026-10 取代降噪三档）
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('嘈杂环境调音',
+                          style: TextStyle(color: t.text, fontSize: 15)),
+                      const SizedBox(height: 2),
+                      Text('自动对准拨弦瞬间，嘈杂环境推荐开启',
+                          style: TextStyle(
+                              color: t.text2.withOpacity(0.7), fontSize: 11)),
+                    ],
+                  ),
+                ),
+                Switch(
+                  key: const Key('noisy_mode_switch'),
+                  value: widget.noisyMode,
+                  activeColor: t.ok,
+                  onChanged: (v) {
+                    widget.haptics?.selectionClick();
+                    setDialogState(() {}); // 触发弹窗刷新（开关值在 widget 上）
+                    widget.onNoisyModeChanged?.call(v);
+                  },
+                ),
+              ],
             ),
           ],
         ),

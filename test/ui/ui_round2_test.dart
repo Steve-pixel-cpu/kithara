@@ -239,9 +239,9 @@ void main() {
       );
     });
 
-    testWidgets('设置按钮: 齿轮图标打开设置弹窗（降噪三档），A4 弹窗不含降噪', (tester) async {
+    testWidgets('设置按钮: 齿轮图标打开设置弹窗（嘈杂模式开关），A4 弹窗不含', (tester) async {
       final controller = TunerController();
-      var gateChanged = false;
+      var noisyChanged = false;
       await tester.pumpWidget(MaterialApp(
         theme: KitharaTheme.dark.toThemeData(),
         home: TunerScreen(
@@ -250,36 +250,32 @@ void main() {
           micPermission: _Granted(),
           haptics: _NoHaptics(),
           theme: KitharaTheme.dark,
-          noiseGate: 'medium',
-          onNoiseGateChanged: (_) => gateChanged = true,
+          noisyMode: false,
+          onNoisyModeChanged: (_) => noisyChanged = true,
         ),
       ));
       await tester.pump();
       await tester.pump();
       // 顶栏有设置齿轮按钮
       expect(find.byKey(const Key('settings_btn')), findsOneWidget);
-      // A4 弹窗不含降噪
+      // A4 弹窗不含嘈杂模式
       await tester.tap(find.text('A4 440.0'));
       await tester.pump();
-      expect(find.text('降噪灵敏度'), findsNothing);
+      expect(find.text('嘈杂环境调音'), findsNothing);
       await tester.tap(find.text('取消'));
       await tester.pump();
-      // 设置弹窗含降噪（下拉框）
+      // 设置弹窗含嘈杂模式开关，点击 → 回调触发
       await tester.tap(find.byKey(const Key('settings_btn')));
       await tester.pump();
-      expect(find.text('降噪灵敏度'), findsOneWidget);
-      // 打开下拉选'严格' → 回调触发
-      await tester.tap(find.byKey(const Key('noise_gate_dropdown')));
+      expect(find.text('嘈杂环境调音'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('noisy_mode_switch')));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.tap(find.text('严格（嘈杂环境）').last);
-      await tester.pump(const Duration(milliseconds: 300));
-      expect(gateChanged, isTrue);
+      expect(noisyChanged, isTrue);
     });
 
-    testWidgets('选档后设置弹窗触发器文本立即刷新（弹窗 route 不随父重建）', (tester) async {
+    testWidgets('开关切换: 回调携带新值 false→true', (tester) async {
       final controller = TunerController();
-      String? changed;
+      bool? changed;
       await tester.pumpWidget(MaterialApp(
         theme: KitharaTheme.dark.toThemeData(),
         home: TunerScreen(
@@ -288,26 +284,17 @@ void main() {
           micPermission: _Granted(),
           haptics: _NoHaptics(),
           theme: KitharaTheme.dark,
-          noiseGate: 'medium',
-          // 只记录回调不触发父重建: 证明弹窗内文本刷新不依赖父层 setState
-          onNoiseGateChanged: (g) => changed = g,
+          noisyMode: false,
+          onNoisyModeChanged: (v) => changed = v,
         ),
       ));
       await tester.pump();
       await tester.pump();
       await tester.tap(find.byKey(const Key('settings_btn')));
       await tester.pump();
-      await tester.tap(find.byKey(const Key('noise_gate_dropdown')));
+      await tester.tap(find.byKey(const Key('noisy_mode_switch')));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.tap(find.text('严格（嘈杂环境）').last);
-      // pop 选择单: 走完退场动画（含 barrier 消散），只剩设置弹窗本身
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-      expect(changed, 'high');
-      // 弹窗仍开着: 触发器文本必须已是新档位, 旧档位文本消失
-      expect(find.text('严格（嘈杂环境）'), findsOneWidget);
-      expect(find.text('标准（日常）'), findsNothing);
+      expect(changed, isTrue);
     });
 
     testWidgets('刻度在弧内侧: 刻度半径 < 弧半径', (tester) async {
@@ -380,7 +367,7 @@ void main() {
       expect(toggled, isTrue);
     });
 
-    testWidgets('降噪接线: 选「严格」后 bridge.noiseGate 变 high（DSP 门限实际生效）', (tester) async {
+    testWidgets('嘈杂模式接线: 开关打开后 bridge.noisyMode 变 true（DSP 门限实际生效）', (tester) async {
       const channel = MethodChannel('com.llfbandit.record/messages');
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
@@ -390,12 +377,6 @@ void main() {
         return null;
       });
       SharedPreferences.setMockInitialValues({});
-      // 测试环境 Ahem 字体每字形 1em 见方，底部弹层三个选项超出半屏
-      // (showModalBottomSheet 默认限高) 且不可滚动 → 缩小文本让第 3 项可见。
-      // 注意: MaterialApp 内部 MediaQuery.fromView 会重置外层 textScaler,
-      // 必须走 platformDispatcher。
-      tester.platformDispatcher.textScaleFactorTestValue = 0.5;
-      addTearDown(tester.platformDispatcher.clearAllTestValues);
       await tester.pumpWidget(const MediaQuery(
         data: MediaQueryData(platformBrightness: Brightness.light),
         child: KitharaApp(),
@@ -403,40 +384,26 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      // bug 26 后续: UI 档位此前没接到 DSP——bridge.noiseGate 无人写入,
-      // RMS 门限恒为 medium。「严格」必须真实改变检测器门限。
-      await tester.binding.setSurfaceSize(const Size(1080, 2400));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
       dynamic homeState;
-          tester.element(find.byType(TunerScreen)).visitAncestorElements((el) {
-            if (el is StatefulElement &&
-                el.widget.runtimeType.toString() == '_TunerHome') {
-              homeState = el.state;
-              return false;
-            }
-            return true;
-          });
-      expect(homeState.bridge.noiseGate, 'medium'); // 初值
+      tester.element(find.byType(TunerScreen)).visitAncestorElements((el) {
+        if (el is StatefulElement &&
+            el.widget.runtimeType.toString() == '_TunerHome') {
+          homeState = el.state;
+          return false;
+        }
+        return true;
+      });
+      expect(homeState.bridge.noisyMode, isFalse); // 初值
 
       await tester.tap(find.byKey(const Key('settings_btn')));
       await tester.pump(const Duration(milliseconds: 300));
-      await tester.tap(find.byKey(const Key('noise_gate_dropdown')));
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.pump();
-      // 测试环境 Ahem 字体每字形 1em 见方，第 3 项渲染在视口外无法 tap，
-      // 直接触发其 InkWell 回调验证接线（菜单渲染问题见 backlog）
-      final strictFinder = find.ancestor(
-        of: find.text('严格（嘈杂环境）'),
-        matching: find.byType(InkWell),
-      );
-      (tester.widget(strictFinder) as InkWell).onTap!();
-      await tester.pump();
+      await tester.tap(find.byKey(const Key('noisy_mode_switch')));
       await tester.pump(const Duration(milliseconds: 400));
 
-      expect(homeState.bridge.noiseGate, 'high'); // 接线生效
+      expect(homeState.bridge.noisyMode, isTrue); // 接线生效
     });
 
-    testWidgets('降噪接线: 恢复持久化档位 high → bridge 初值即 high', (tester) async {
+    testWidgets('嘈杂模式接线: 恢复持久化 noisyMode=true → bridge 初值即 true', (tester) async {
       const channel = MethodChannel('com.llfbandit.record/messages');
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
@@ -445,7 +412,7 @@ void main() {
         }
         return null;
       });
-      SharedPreferences.setMockInitialValues({'noiseGate': 'high'});
+      SharedPreferences.setMockInitialValues({'noisyMode': true});
       await tester.pumpWidget(const MediaQuery(
         data: MediaQueryData(platformBrightness: Brightness.light),
         child: KitharaApp(),
@@ -463,7 +430,7 @@ void main() {
             }
             return true;
           });
-      expect(homeState.bridge.noiseGate, 'high');
+      expect(homeState.bridge.noisyMode, isTrue);
     });
   });
 

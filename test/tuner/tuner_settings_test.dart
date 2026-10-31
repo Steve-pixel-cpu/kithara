@@ -40,16 +40,16 @@ void main() {
     expect(loaded.themeMode, 'light');
   });
 
-  test('noiseGate 档位持久化: low/medium/high', () async {
-    SharedPreferences.setMockInitialValues({'noiseGate': 'high'});
+  test('noisyMode 持久化 roundtrip: 开 → 开', () async {
+    SharedPreferences.setMockInitialValues({'noisyMode': true});
     final loaded = await TunerSettings.load();
-    expect(loaded.noiseGate, 'high');
+    expect(loaded.noisyMode, isTrue);
   });
 
-  test('noiseGate 非法值回退 medium', () async {
-    SharedPreferences.setMockInitialValues({'noiseGate': 'loud'});
+  test('无 noisyMode 存储 → 默认关', () async {
+    SharedPreferences.setMockInitialValues({});
     final loaded = await TunerSettings.load();
-    expect(loaded.noiseGate, 'medium');
+    expect(loaded.noisyMode, isFalse);
   });
 
   test('themeMode 非法值回退 system', () async {

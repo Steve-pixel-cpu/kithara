@@ -1,8 +1,12 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'dart:math' as math;
 
 import 'audio/mic_stream.dart';
 import 'theme/kithara_theme.dart';
+import 'dsp/onset_gate.dart';
 import 'dsp/pitch_detector.dart';
 import 'tuner/tuner_controller.dart';
 import 'tuner/tuner_settings.dart';
@@ -22,7 +26,7 @@ class KitharaApp extends StatefulWidget {
 class _KitharaAppState extends State<KitharaApp> {
   /// 'system' | 'light' | 'dark'（循环切换：dark → light → system → dark）
   String _themeMode = 'system';
-  String _noiseGate = 'medium';
+  bool _noisyMode = false;
   bool _settingsRestored = false;
 
   bool get _effectiveDark =>
@@ -40,7 +44,7 @@ class _KitharaAppState extends State<KitharaApp> {
       if (mounted && !_settingsRestored) {
         setState(() {
           _themeMode = s.themeMode;
-          _noiseGate = s.noiseGate;
+          _noisyMode = s.noisyMode;
         });
       }
     });
@@ -62,7 +66,7 @@ class _KitharaAppState extends State<KitharaApp> {
       a4 ?? _homeKey.currentState?.bridge.lastSavedA4 ?? 440.0,
       isDark: _effectiveDark,
       themeMode: themeMode ?? _themeMode,
-      noiseGate: _noiseGate,
+      noisyMode: _noisyMode,
     );
   }
 
@@ -82,10 +86,10 @@ class _KitharaAppState extends State<KitharaApp> {
         key: _homeKey,
         theme: theme,
         themeMode: _themeMode,
-        noiseGate: _noiseGate,
+        noisyMode: _noisyMode,
         onThemeModeChanged: _handleThemeModeChanged,
-        onNoiseGateChanged: (g) {
-          setState(() => _noiseGate = g);
+        onNoisyModeChanged: (v) {
+          setState(() => _noisyMode = v);
           _saveSettings();
         },
         settingsSaver: (modeId, a4) => _saveSettings(modeId: modeId, a4: a4),
@@ -101,17 +105,17 @@ class _TunerHome extends StatefulWidget {
     super.key,
     this.theme,
     this.themeMode,
-    this.noiseGate,
+    this.noisyMode,
     this.onThemeModeChanged,
-    this.onNoiseGateChanged,
+    this.onNoisyModeChanged,
     required this.settingsSaver,
   });
 
   final KitharaTheme? theme;
   final String? themeMode;
-  final String? noiseGate;
+  final bool? noisyMode;
   final ValueChanged<String>? onThemeModeChanged;
-  final ValueChanged<String>? onNoiseGateChanged;
+  final ValueChanged<bool>? onNoisyModeChanged;
   final void Function(String modeId, double a4) settingsSaver;
 
   @override
@@ -135,9 +139,8 @@ class _TunerHomeState extends State<_TunerHome> {
       mic: _mic,
       // App 层统一保存（mode/a4 + 当前主题一起落盘，不互相覆盖）
       onSave: widget.settingsSaver,
-      // 降噪档位接线进 DSP: 桥的 tick() 按此映射 RMS 门限（bug: 此前
-      // 无人写入, 「严格/宽松」形同虚设, 门限恒 medium）
-      noiseGate: widget.noiseGate ?? 'medium',
+      // 嘈杂环境调音接线：桥在 tick() 检测变更即切换检测器门限 + onset 门
+      noisyMode: widget.noisyMode ?? false,
     );
     _restoreSettings();
     _ticker = Ticker((_) => _bridge.tick());
@@ -147,9 +150,9 @@ class _TunerHomeState extends State<_TunerHome> {
   @override
   void didUpdateWidget(covariant _TunerHome oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // App 层选档（或恢复）后下行同步: 桥在下次 tick 里检测到变更即重建检测器
-    if (widget.noiseGate != oldWidget.noiseGate) {
-      _bridge.noiseGate = widget.noiseGate ?? 'medium';
+    // App 层开关（或恢复）后下行同步: 桥在下次 tick 检测到变更即切换
+    if (widget.noisyMode != oldWidget.noisyMode) {
+      _bridge.noisyMode = widget.noisyMode ?? false;
     }
   }
 
@@ -178,8 +181,8 @@ class _TunerHomeState extends State<_TunerHome> {
       haptics: HapticsImpl(),
       theme: widget.theme ?? KitharaTheme.dark,
       themeMode: widget.themeMode ?? 'dark',
-      noiseGate: widget.noiseGate ?? 'medium',
-      onNoiseGateChanged: widget.onNoiseGateChanged,
+      noisyMode: widget.noisyMode ?? false,
+      onNoisyModeChanged: widget.onNoisyModeChanged,
       onThemeToggle: () {
         // 三态循环: dark → light → system → dark
         final cur = widget.themeMode ?? 'dark';
@@ -202,25 +205,34 @@ class TunerPipelineBridge {
     required this.controller,
     required this.mic,
     required this.onSave,
-    this.noiseGate = 'medium',
+    this.noisyMode = false,
   });
 
   final TunerController controller;
   final MicStream mic;
   final void Function(String modeId, double a4) onSave;
 
-  /// 降噪档位 'low' | 'medium' | 'high' → RMS 门限映射
-  static const _gateRms = {'low': 0.0, 'medium': 0.008, 'high': 0.02};
+  /// 嘈杂环境调音（2026-10 取代降噪三档）：
+  /// 仿真结论（真实 Martin 录音 + 风扇/白噪声）：
+  /// - 拨弦瞬间帧置信中位 1.26+（0dB 风扇），0.85 门拦不住它们——
+  ///   真机"静默"根因是控制器凑不齐 3 帧一致 + 带内噪声摊薄频段占比。
+  /// - 解药 = 检测器双门限放宽（conf 0.70 / band 0.06）+ OnsetGate
+  ///   时间门（1.5x RMS 跳升开 400ms 窗，窗外帧不进控制器）+
+  ///   唤醒帧数 3→2。0dB 风扇下每次拨弦命中率 49/20、精度 28¢。
+  /// - 平时模式行为与旧"标准档"一致（rmsGate 0.008, conf 0.85）。
+  static const _rmsGatePlain = 0.008;
 
-  String noiseGate;
-  PitchDetector _detector = PitchDetector(
-      rmsGate: _gateRms['medium']!);
+  bool noisyMode;
+  PitchDetector _detector = PitchDetector(rmsGate: _rmsGatePlain);
+  final OnsetGate _onsetGate = OnsetGate();
   TuningMode? _lastMode;
   double? _lastA4;
-  String _lastGate = 'medium';
+  bool _lastNoisy = false;
 
   // 检测节流 10Hz: 人对指针方向变化的反应 ~200ms, 拧弦动作 0.5-2s,
   // 10Hz 刷新绰绰有余; DSP(CPU/电量)开销直降 2/3
+  // （嘈杂模式下 OnsetGate 窗口粒度需要更密的帧——节流仍是 100ms，
+  //   EMA/窗口以 10Hz 节奏运转，400ms 窗 = 4 帧，仿真同参数。）
   static const _detectInterval = Duration(milliseconds: 100);
   DateTime _lastDetect = DateTime.now().subtract(_detectInterval);
 
@@ -232,11 +244,18 @@ class TunerPipelineBridge {
     final now = DateTime.now();
     if (now.difference(_lastDetect) < _detectInterval) return;
     _lastDetect = now;
-    // 设置变更检测（含首次）：模式/降噪变更 → 重建检测器；变更即持久化
+    // 设置变更检测（含首次）：模式/嘈杂模式变更 → 重建检测器 + 重置 onset 门
     final s = controller.state;
-    if (noiseGate != _lastGate) {
-      _lastGate = noiseGate;
+    if (noisyMode != _lastNoisy) {
+      _lastNoisy = noisyMode;
       _detector = _buildDetector(s.mode);
+      _onsetGate.reset();
+      // 嘈杂模式：唤醒 3→2 帧；信号触发门限 0.85→0.75（检测器已放宽到
+      // 0.70, 不联动这里会出现"检测器放行、控制器拒收"的缺口——真机
+      // 表现即"开不开启差别不大"）
+      controller.wakeFrames = noisyMode ? 2 : 3;
+      controller.captureConfidence = 0.85;
+      controller.confOn = noisyMode ? 0.75 : 0.85;
     }
     if (_lastMode == null ||
         s.mode.id != _lastMode!.id ||
@@ -247,17 +266,59 @@ class TunerPipelineBridge {
       _lastA4 = s.a4;
       if (modeChanged) {
         _detector = _buildDetector(s.mode);
+        _onsetGate.reset();
       }
       onSave(s.mode.id, s.a4);
     }
     final window = mic.ringBuffer.readWindow(_detector.window);
     if (window == null) return;
-    controller.onPitch(_detector.detect(window), _detector.lastConfidence);
+    // 前置滤波 + RMS（滤波后计量，与检测器第 0 步同一口径）。
+    // 嘈杂模式：先过 OnsetGate——窗外帧直接喂 null（控制器走
+    // 无信号路径，2s 锁定保持接住读数）；窗内帧才进检测器。
+    if (noisyMode) {
+      final rms = _filteredRms(window);
+      final gateAccepted = _onsetGate.accept(rms, now);
+      controller.diagnostics =
+          'RMS ${rms.toStringAsFixed(4)} · 底噪EMA ${_onsetGate.emaValue?.toStringAsFixed(4) ?? "-"} · 窗口${gateAccepted ? "开" : "关"}';
+      if (!gateAccepted) {
+        controller.onPitch(null, 0.0);
+        return;
+      }
+    }
+    final pitch = _detector.detect(window);
+    if (noisyMode) {
+      controller.diagnostics +=
+          ' · conf ${_detector.lastConfidence.toStringAsFixed(2)}${pitch == null ? "（拒）" : ""}';
+    }
+    controller.onPitch(pitch, _detector.lastConfidence);
   }
 
   PitchDetector _buildDetector(TuningMode mode) => PitchDetector(
         minFreq: mode.detectorMinFreq,
         maxFreq: mode.detectorMaxFreq,
-        rmsGate: _gateRms[noiseGate] ?? 0.008,
+        rmsGate: noisyMode ? 0.0 : _rmsGatePlain,
+        confidenceGate: noisyMode ? 0.70 : 0.85,
+        bandRatioGate: noisyMode ? 0.06 : 0.10,
       );
+
+  /// 与 PitchDetector.detect 第 0 步相同的去直流 + 两级低通后 RMS。
+  /// （复制 8 行数学以避免检测器暴露中间态；若滤波参数改动需同步。）
+  static double _filteredRms(Float32List frame) {
+    const lpCutoffHz = 1800.0;
+    const sampleRate = 44100.0;
+    final alpha = 1.0 - math.exp(-2.0 * math.pi * lpCutoffHz / sampleRate);
+    var mean = 0.0;
+    for (var i = 0; i < frame.length; i++) {
+      mean += frame[i];
+    }
+    mean /= frame.length;
+    var lp1 = 0.0, lp2 = 0.0, sumSq = 0.0;
+    for (var i = 0; i < frame.length; i++) {
+      final dc = frame[i] - mean;
+      lp1 += alpha * (dc - lp1);
+      lp2 += alpha * (lp1 - lp2);
+      sumSq += lp2 * lp2;
+    }
+    return math.sqrt(sumSq / frame.length);
+  }
 }
