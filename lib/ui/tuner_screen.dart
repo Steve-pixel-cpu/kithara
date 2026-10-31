@@ -614,14 +614,6 @@ class _TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver, 
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 嘈杂模式实时诊断（真机排障: 打开设置即可读链路各层状态）
-            if (widget.noisyMode && widget.controller.diagnostics.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Text(widget.controller.diagnostics,
-                    key: const Key('noisy_diagnostics'),
-                    style: TextStyle(color: t.text3, fontSize: 10)),
-              ),
             // 嘈杂环境调音开关（2026-10 取代降噪三档）
             Row(
               children: [
