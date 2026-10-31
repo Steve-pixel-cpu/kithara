@@ -66,6 +66,40 @@ void main() {
       expect(g.accept(0.001, t), isFalse);
     });
 
+    test('置信旁路: conf>=1.0 立即放行（近场风扇琴噪同响场景）', () {
+      final g = OnsetGate();
+      final t0 = DateTime(2026, 10, 31);
+      // 风扇 RMS 0.09 持续（EMA 贴住 0.09, RMS 跳升通道永不触发）
+      var t = t0;
+      for (var i = 0; i < 50; i++) {
+        g.accept(0.09, t);
+        t = t.add(const Duration(milliseconds: 50));
+      }
+      // 拨弦: RMS 0.087（比噪声还小！跳升不可能）但 NSDF 1.13
+      expect(g.acceptByConfidence(1.13, -300.0, t), isTrue,
+          reason: '高置信立即放行');
+    });
+
+    test('置信旁路: 0.70-1.0 需连续 2 帧音高一致（风扇伪周期单帧冲高被滤）', () {
+      final g = OnsetGate();
+      final t0 = DateTime(2026, 10, 31);
+      var t = t0;
+      // 第一帧 conf 0.8, 音高 A2
+      expect(g.acceptByConfidence(0.80, -300.0, t), isFalse,
+          reason: '中置信首帧不放行');
+      // 第二帧同音高 → 放行
+      t = t.add(const Duration(milliseconds: 50));
+      expect(g.acceptByConfidence(0.80, -299.0, t), isTrue,
+          reason: '连续 2 帧 ±30¢ 内一致');
+      // 低置信帧打断
+      t = t.add(const Duration(milliseconds: 50));
+      expect(g.acceptByConfidence(0.5, -300.0, t), isFalse);
+      // 换到完全不同音高的单帧 → 不放行（伪周期跳变）
+      t = t.add(const Duration(milliseconds: 50));
+      expect(g.acceptByConfidence(0.85, 400.0, t), isFalse,
+          reason: '与上一帧音高差 >30¢');
+    });
+
     test('reset() 后 EMA 重新 seeded（模式切换/管线重建）', () {
       final g = OnsetGate();
       final t0 = DateTime(2026, 10, 31);

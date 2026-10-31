@@ -41,6 +41,37 @@ class OnsetGate {
   /// 是否开放采信窗口（含刚触发起振的这一帧）
   bool get isOpen => _openUntil != null;
 
+  /// 置信旁路通道的参数：高置信立即放行 + 双帧一致确认
+  static const confidentThreshold = 1.0;
+  static const confirmThreshold = 0.70;
+  double? _lastConfCents;
+
+  /// 基于检测置信度的放行判断（嘈杂模式第二通道）。
+  /// 近场风扇下琴与噪声音量相当，RMS 跳升不存在（真机诊断证实：
+  /// RMS 0.087 < EMA 0.096），但琴的周期性极强（NSDF>1.0）而风扇
+  /// 伪周期帧不会连续稳定——高置信立即放行，中置信需连续 2 帧
+  /// 音高一致才放行。
+  /// [cents] 当前帧音高（音分域），[confidence] NSDF 峰值。
+  bool acceptByConfidence(double confidence, double cents, DateTime now) {
+    if (confidence >= confidentThreshold) {
+      _lastConfCents = cents;
+      _openUntil = now.add(acceptWindow);
+      return true;
+    }
+    if (confidence >= confirmThreshold) {
+      final last = _lastConfCents;
+      if (last != null && (cents - last).abs() <= 30) {
+        _lastConfCents = cents;
+        _openUntil = now.add(acceptWindow);
+        return true;
+      }
+      _lastConfCents = cents;
+      return false;
+    }
+    _lastConfCents = null;
+    return false;
+  }
+
   /// 喂入一帧的滤波后 RMS，返回本帧是否放行。
   /// [now] 由管线注入（DateTime.now()），便于测试注入时钟。
   bool accept(double rms, DateTime now) {

@@ -273,24 +273,33 @@ class TunerPipelineBridge {
     final window = mic.ringBuffer.readWindow(_detector.window);
     if (window == null) return;
     // 前置滤波 + RMS（滤波后计量，与检测器第 0 步同一口径）。
-    // 嘈杂模式：先过 OnsetGate——窗外帧直接喂 null（控制器走
-    // 无信号路径，2s 锁定保持接住读数）；窗内帧才进检测器。
     if (noisyMode) {
       final rms = _filteredRms(window);
-      final gateAccepted = _onsetGate.accept(rms, now);
+      // 嘈杂模式双通道：检测器先跑（门限已放宽），再决定放行——
+      //   通道1 RMS 跳升（onset）：琴明显比噪声响时有效
+      //   通道2 置信旁路：近场风扇下琴噪同响（真机诊断 RMS 0.087 <
+      //          EMA 0.096，跳升不存在），改信周期性——琴 NSDF>1.0
+      //          立即放行，0.70-1.0 需连续 2 帧音高一致（风扇伪周期
+      //          不会稳定重复）
+      final pitch = _detector.detect(window);
+      final conf = _detector.lastConfidence;
+      var gateAccepted = _onsetGate.accept(rms, now);
+      var channel = 'rms';
+      if (!gateAccepted && pitch != null) {
+        final cents = 1200.0 * math.log(pitch / 440.0) / math.ln2;
+        gateAccepted = _onsetGate.acceptByConfidence(conf, cents, now);
+        channel = 'conf';
+      }
       controller.diagnostics =
-          'RMS ${rms.toStringAsFixed(4)} · 底噪EMA ${_onsetGate.emaValue?.toStringAsFixed(4) ?? "-"} · 窗口${gateAccepted ? "开" : "关"}';
+          'RMS ${rms.toStringAsFixed(3)} · EMA ${_onsetGate.emaValue?.toStringAsFixed(3) ?? "-"} · conf ${conf.toStringAsFixed(2)} · ${gateAccepted ? "放行($channel)" : "拒"}';
       if (!gateAccepted) {
         controller.onPitch(null, 0.0);
         return;
       }
+      controller.onPitch(pitch, conf);
+      return;
     }
-    final pitch = _detector.detect(window);
-    if (noisyMode) {
-      controller.diagnostics +=
-          ' · conf ${_detector.lastConfidence.toStringAsFixed(2)}${pitch == null ? "（拒）" : ""}';
-    }
-    controller.onPitch(pitch, _detector.lastConfidence);
+    controller.onPitch(_detector.detect(window), _detector.lastConfidence);
   }
 
   PitchDetector _buildDetector(TuningMode mode) => PitchDetector(
